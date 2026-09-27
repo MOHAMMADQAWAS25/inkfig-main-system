@@ -62,3 +62,63 @@ This file is the repository's running implementation history for agent-assisted 
 - Added this repository-level feature log and established the read-before-work and update-after-work convention.
 - Verification: confirmed the file exists in the repository.
 - Migration required: No.
+
+## 2026-09-28 - Standardize agent feature log requirements
+
+### Request
+
+Require every repository to use a root `AGENT_FEATURE_LOG.md`, read it fully before each ticket, preserve its history, and append every completed ticket using the prescribed structured sections.
+
+### Changes
+
+- Renamed the existing root feature log to the exact uppercase filename while preserving all previous entries unchanged.
+- Adopted the required entry format for this and all future tickets.
+- Intentionally left application behavior, authorization, APIs, database configuration, and dependencies unchanged.
+
+### Repositories
+
+- `delivery-main-system`: standardized the root feature-log filename and adopted the structured ticket record.
+- `delivery-user-system`: standardized the root feature-log filename and adopted the structured ticket record.
+- `delivery-user-FE`: standardized the root feature-log filename and adopted the structured ticket record.
+
+### Files
+
+- `AGENT_FEATURE_LOG.md`: renamed from `agent_feature_log.md` and appended this structured entry.
+
+### API
+
+No API changes.
+
+### Database
+
+No migration required.
+
+### Permissions and scope
+
+- No permissions or role access changed.
+- No organization or domain scope changed.
+- Backend authorization behavior is unchanged.
+
+### Frontend
+
+No frontend changes.
+
+### Verification
+
+- `[passed] git status --short` - confirmed the case-only rename is tracked.
+- `[passed] git diff --check`
+- `[not run] application tests and builds` - documentation-only filename and log-format change.
+
+### Deployment
+
+No special deployment steps.
+
+### Git
+
+- Branch: `main`
+- Commit: `89e00b0`
+- Push: `successful`
+
+### Notes
+
+Historical entries retain their original format; the required structured format applies from this entry onward.
