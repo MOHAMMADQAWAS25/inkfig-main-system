@@ -11,6 +11,13 @@ This file is the repository's running implementation history for agent-assisted 
 
 ## Entries
 
+### 2026-09-28 - Add local Supabase configuration placeholders
+
+- Added blank `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, and `DATABASE_URL` placeholders to `.env.example`.
+- Created the ignored local `.env` file with the same blank placeholders for developer-supplied secrets.
+- Verification: confirmed `.env` exists locally, is ignored by Git, and contains no secret values; `git diff --check` passed.
+- Migration required: No.
+
 ### 2026-09-28 - Establish the FastAPI architecture foundation
 
 - Added the `entities -> app -> interface/infrastructure` package structure based on Shadow's practical clean architecture, adapted for the InkFig domain.
