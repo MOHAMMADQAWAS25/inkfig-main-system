@@ -11,6 +11,14 @@ This file is the repository's running implementation history for agent-assisted 
 
 ## Entries
 
+### 2026-09-28 - Validate Supabase connectivity configuration
+
+- Confirmed the ignored local environment contains all three required Supabase variables without exposing their values.
+- Verified an authenticated request to the configured Supabase API succeeds.
+- The read-only PostgreSQL `SELECT 1` check could not start because the configured `DATABASE_URL` is malformed with an empty port; the URL must be replaced with a complete single-line connection string.
+- Verification: Supabase API passed; database URL parsing failed before any database connection was attempted.
+- Migration required: No.
+
 ### 2026-09-28 - Make database configuration Supabase-only
 
 - Removed the local `POSTGRES_*` fallback fields from application settings, `.env.example`, and the ignored local `.env` file.
