@@ -8,11 +8,9 @@ class Settings(BaseSettings):
     environment: str = "local"
     api_prefix: str = "/api/v1"
     cors_origins: list[str] = ["http://localhost:5173"]
-    postgres_user: str = "postgres"
-    postgres_password: str = ""
-    postgres_host: str = "localhost"
-    postgres_port: int = 5432
-    postgres_db: str = "inkfig_main"
+    supabase_url: str = ""
+    supabase_secret_key: str = ""
+    database_url: str = ""
 
     model_config = SettingsConfigDict(
         env_file=".env",

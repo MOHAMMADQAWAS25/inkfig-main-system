@@ -11,6 +11,14 @@ This file is the repository's running implementation history for agent-assisted 
 
 ## Entries
 
+### 2026-09-28 - Make database configuration Supabase-only
+
+- Removed the local `POSTGRES_*` fallback fields from application settings, `.env.example`, and the ignored local `.env` file.
+- Made `DATABASE_URL` the single PostgreSQL connection setting alongside the Supabase project URL and backend secret key.
+- Added a regression test confirming that no localhost/PostgreSQL-host fallback remains.
+- Verification: 3 pytest tests passed; mypy reported no issues in 29 source files; Python byte-compilation and `git diff --check` passed.
+- Migration required: No.
+
 ### 2026-09-28 - Add local Supabase configuration placeholders
 
 - Added blank `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, and `DATABASE_URL` placeholders to `.env.example`.
