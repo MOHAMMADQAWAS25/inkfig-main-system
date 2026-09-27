@@ -36,3 +36,14 @@ The platform will support multiple ways of presenting and discovering artwork. T
 ## Project status
 
 This document records the initial product direction, not a complete specification. Detailed requirements, artwork presentation modes, algorithms, roles, permissions, and additional workflows will be defined as the project develops.
+
+## Development
+
+This backend uses Python 3.13, FastAPI, PostgreSQL, and the practical clean architecture documented in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
+```powershell
+py -m pip install -r requirements.txt
+uvicorn src.main:app --reload
+```
+
+The health endpoint is available at `/health` and `/api/v1/health`.
