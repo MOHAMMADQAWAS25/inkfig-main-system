@@ -122,3 +122,65 @@ No special deployment steps.
 ### Notes
 
 Historical entries retain their original format; the required structured format applies from this entry onward.
+
+## 2026-09-28 - Verify live Supabase connections
+
+### Request
+
+Retest the backend connection after replacing the direct IPv6 PostgreSQL URL with the Supabase Session Pooler connection string.
+
+### Changes
+
+- Performed read-only live checks against the configured Supabase API and PostgreSQL database without printing credentials.
+- Confirmed the Session Pooler connection works with SQLAlchemy and asyncpg.
+- Removed the temporary diagnostic script after verification.
+- Intentionally left runtime application code and configuration values unchanged.
+
+### Repositories
+
+- `delivery-main-system`: verified its local Supabase API and database configuration.
+- `delivery-user-system`: verified its local Supabase API and database configuration.
+
+### Files
+
+- `AGENT_FEATURE_LOG.md`: recorded the successful live connection verification.
+
+### API
+
+No API changes.
+
+### Database
+
+No migration required.
+
+### Permissions and scope
+
+- No permissions or roles changed.
+- No organization or domain scope changed.
+- Backend authorization behavior is unchanged.
+
+### Frontend
+
+No frontend changes.
+
+### Verification
+
+- `[passed] authenticated GET to the configured Supabase REST API root`
+- `[passed] SQLAlchemy asyncpg connection through the Supabase Session Pooler`
+- `[passed] SELECT 1`
+- `[not run] pytest and mypy` - no application source code changed.
+
+### Deployment
+
+- Configure `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, and the Session Pooler `DATABASE_URL` in each deployed backend environment.
+- No migrations must run before deployment.
+
+### Git
+
+- Branch: `main`
+- Commit: `d0987be`
+- Push: `successful`
+
+### Notes
+
+The verified local `.env` secrets remain ignored by Git and were not printed or committed.
