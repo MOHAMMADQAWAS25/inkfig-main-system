@@ -11,6 +11,14 @@ This file is the repository's running implementation history for agent-assisted 
 
 ## Entries
 
+### 2026-09-28 - Retest Supabase database connectivity
+
+- Verified the corrected `DATABASE_URL` has the asyncpg driver, complete direct Supabase host, port `5432`, database name, username, and a populated password without exposing secret values.
+- Verified the authenticated Supabase API request still succeeds.
+- The read-only PostgreSQL check reached connection setup but failed DNS resolution because the direct Supabase database endpoint requires IPv6 in this environment; use the project's Session Pooler connection string for IPv4 access.
+- Verification: Supabase API passed; database `SELECT 1` was not reached because direct-host DNS resolution failed.
+- Migration required: No.
+
 ### 2026-09-28 - Validate Supabase connectivity configuration
 
 - Confirmed the ignored local environment contains all three required Supabase variables without exposing their values.
