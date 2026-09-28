@@ -391,3 +391,73 @@ No frontend changes.
 ### Notes
 
 Python 3.12 is an AWS Lambda-supported runtime and matches the installed local interpreter. Using `sam build --use-container` remains an optional alternative when a matching local interpreter is unavailable.
+## 2026-09-29 - Configure the main API custom domain
+
+### Request
+
+Configure `main-api.inkfig-hu.com` as the Cloudflare-managed hostname for the main backend.
+
+### Changes
+
+- Added a regional API Gateway custom domain secured by an ACM certificate supplied at deployment.
+- Mapped the custom domain root path to the HTTP API `$default` stage using TLS 1.2.
+- Added stack outputs for the public custom URL and the generated API Gateway hostname required as the Cloudflare CNAME target.
+- Assigned the main backend its own CloudFormation stack and S3 prefix so it cannot collide with the user backend deployment.
+- Documented ACM region and Cloudflare DNS/proxy requirements.
+- Left FastAPI behavior, authorization, APIs, and database access unchanged.
+
+### Repositories
+
+- `inkfig-main-system`: configured `main-api.inkfig-hu.com` and its deployment outputs.
+- `inkfig-user-system`: separately configured `user-api.inkfig-hu.com`.
+
+### Files
+
+- `template.yaml`: added the certificate parameter, API Gateway custom domain, API mapping, and domain outputs.
+- `samconfig.toml`: added the repository-specific deployment stack configuration.
+- `README.md`: documented certificate and Cloudflare CNAME setup.
+- `AGENT_FEATURE_LOG.md`: recorded this ticket.
+
+### API
+
+- `ANY https://main-api.inkfig-hu.com/`: maps to the existing HTTP API `$default` stage.
+- `ANY https://main-api.inkfig-hu.com/{proxy+}`: continues forwarding nested FastAPI routes.
+- No request, response, validation, filtering, or error-contract changes.
+
+### Database
+
+No migration required.
+
+### Permissions and scope
+
+- No application permissions, roles, or scopes changed.
+- Existing backend authorization remains authoritative and backend-enforced.
+
+### Frontend
+
+No frontend changes.
+
+### Verification
+
+- `[passed] sam validate --lint`
+- `[passed] sam build`
+- `[passed] py -m pytest` — 4 tests passed.
+- `[passed] py -m mypy src tests` — no issues in 30 source files.
+- `[passed] git diff --check`
+
+### Deployment
+
+- Deploy the `inkfig-main-system` stack in `eu-west-1` and provide an ACM certificate ARN valid for `main-api.inkfig-hu.com` from that region.
+- After deployment, create Cloudflare CNAME `main-api` pointing to the `CloudflareCnameTarget` stack output; use DNS-only during initial validation.
+- No migration is required before deployment.
+- Existing Supabase, database, CORS, and environment parameters remain required.
+
+### Git
+
+- Branch: `main`
+- Commit: `03c8fb2`
+- Push: `successful`
+
+### Notes
+
+Cloudflare DNS cannot be completed until AWS deploys the custom domain and returns its unique regional hostname. If Cloudflare proxying is enabled later, use Full (strict) SSL/TLS mode.
