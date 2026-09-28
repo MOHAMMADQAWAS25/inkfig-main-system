@@ -77,6 +77,8 @@ Resources:
 
   ApiDomainMapping:
     Type: AWS::ApiGatewayV2::ApiMapping
+    DependsOn:
+      - HttpApiApiGatewayDefaultStage
     Properties:
       ApiId: !Ref HttpApi
       DomainName: !Ref ApiDomainName
