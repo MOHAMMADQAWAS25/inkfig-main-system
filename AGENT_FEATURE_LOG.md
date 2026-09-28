@@ -184,3 +184,82 @@ No frontend changes.
 ### Notes
 
 The verified local `.env` secrets remain ignored by Git and were not printed or committed.
+
+## 2026-09-29 - Add AWS SAM Lambda deployment template
+
+### Request
+
+Prepare the InkFig main FastAPI backend for deployment to AWS Lambda using AWS SAM and add a root `template.yaml`.
+
+### Changes
+
+- Added a Mangum adapter that exposes the existing FastAPI application as an AWS Lambda handler.
+- Added a SAM template with Python 3.13, x86_64 Lambda, API Gateway HTTP API root/proxy events, tracing, resource tags, and API/function outputs.
+- Added deployment parameters for environment, trusted CORS origins, Supabase URL, backend secret key, Session Pooler database URL, and project name; secret parameters use `NoEcho`.
+- Added Mangum to backend dependencies and excluded `.aws-sam/` build output from Git.
+- Made the existing settings regression test inspect model defaults without loading local secrets.
+- Documented SAM validation, build, and guided deployment commands.
+- Intentionally left FastAPI routes, authorization behavior, database schema, and custom-domain configuration unchanged.
+
+### Repositories
+
+- `delivery-main-system`: added its Lambda handler, SAM template, deployment documentation, dependency, and focused test.
+- `delivery-user-system`: added its Lambda handler, SAM template, deployment documentation, dependency, and focused test.
+
+### Files
+
+- `template.yaml`: defines the main-system Lambda and API Gateway HTTP API.
+- `src/lambda_handler.py`: wraps FastAPI with Mangum.
+- `requirements.txt`: adds Mangum.
+- `tests/test_health.py`: verifies the Lambda handler and avoids loading secret configuration in assertions.
+- `.gitignore`: excludes SAM build artifacts.
+- `README.md`: documents validation, build, deployment, and parameter handling.
+- `AGENT_FEATURE_LOG.md`: records this ticket.
+
+### API
+
+- `ANY /`: API Gateway forwards root requests to FastAPI.
+- `ANY /{proxy+}`: API Gateway forwards all nested paths, including `/api/v1/*`, to FastAPI.
+- No request fields, responses, filters, validation, permission checks, or application error contracts changed.
+
+### Database
+
+No migration required.
+
+### Permissions and scope
+
+- No application permissions, roles, or access scopes changed.
+- Existing and future backend authorization remains authoritative inside FastAPI.
+- The SAM template creates only the Lambda execution role required by the serverless function; no domain-specific IAM permissions were added.
+
+### Frontend
+
+No frontend changes.
+
+### Verification
+
+- `[passed] Python YAML compose check for template.yaml`
+- `[passed] py -m pytest` - 4 tests passed.
+- `[passed] py -m mypy src tests` - no issues in 30 source files.
+- `[passed] py -m compileall -q src tests`
+- `[passed] git diff --check`
+- `[failed] initial py -m pytest` - the pre-existing settings test loaded local `.env` data and was corrected to inspect field defaults without exposing values.
+- `[not run] sam validate --lint` - AWS SAM CLI is not installed in this environment.
+- `[not run] sam build` - AWS SAM CLI is not installed in this environment.
+
+### Deployment
+
+- Deploy `delivery-main-system` as its own SAM/CloudFormation stack.
+- Run `sam validate --lint`, `sam build`, and `sam deploy --guided` on a machine with AWS SAM CLI and configured AWS credentials.
+- Provide `CorsOrigins`, `SupabaseUrl`, `SupabaseSecretKey`, and the Session Pooler `DatabaseUrl` during deployment; do not save secrets in committed files.
+- No migrations must run before deployment.
+
+### Git
+
+- Branch: `main`
+- Commit: `f132664`
+- Push: `successful`
+
+### Notes
+
+Custom domains and ACM certificates remain follow-up work after the production domains are chosen. The database password appeared in failed test output and must be rotated before deployment.
