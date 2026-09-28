@@ -327,3 +327,67 @@ No frontend changes.
 ### Notes
 
 The old GitHub URL redirected successfully, but the canonical URL is now configured directly.
+## 2026-09-29 - Align AWS SAM runtime with local Python 3.12
+
+### Request
+
+Fix the AWS SAM build failure caused by the template requiring Python 3.13 while the development machine provides Python 3.12.
+
+### Changes
+
+- Changed the Lambda runtime from `python3.13` to `python3.12` so SAM can use the installed interpreter.
+- Aligned mypy's configured Python version and the README development documentation with Python 3.12.
+- Left application behavior, authentication, API contracts, and deployment topology unchanged.
+
+### Repositories
+
+- `inkfig-main-system`: aligned the SAM, type-checking, and documented Python runtime.
+- `inkfig-user-system`: received the matching runtime alignment in its own repository.
+
+### Files
+
+- `template.yaml`: changed the Lambda runtime to `python3.12`.
+- `mypy.ini`: changed the type-checking target to Python 3.12.
+- `README.md`: documented Python 3.12 as the backend development version.
+- `AGENT_FEATURE_LOG.md`: recorded this ticket.
+
+### API
+
+No API changes.
+
+### Database
+
+No migration required.
+
+### Permissions and scope
+
+- No permissions or role scopes changed.
+- Existing backend authorization remains unchanged and backend-enforced.
+
+### Frontend
+
+No frontend changes.
+
+### Verification
+
+- `[passed] sam build`
+- `[passed] py -m pytest` — 4 tests passed.
+- `[passed] py -m mypy src tests` — no issues in 30 source files.
+- `[passed] py -m compileall -q src tests`
+- `[passed] git diff --check`
+
+### Deployment
+
+- Deploy `inkfig-main-system` when this runtime correction is needed in AWS.
+- No migration is required before deployment.
+- No environment-variable or configuration-value changes are required; rebuild the SAM artifact before deployment.
+
+### Git
+
+- Branch: `main`
+- Commit: `35a14c4`
+- Push: `successful`
+
+### Notes
+
+Python 3.12 is an AWS Lambda-supported runtime and matches the installed local interpreter. Using `sam build --use-container` remains an optional alternative when a matching local interpreter is unavailable.
