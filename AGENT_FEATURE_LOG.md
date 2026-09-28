@@ -263,3 +263,67 @@ No frontend changes.
 ### Notes
 
 Custom domains and ACM certificates remain follow-up work after the production domains are chosen. The database password appeared in failed test output and must be rotated before deployment.
+
+## 2026-09-29 - Align local folders with renamed repositories
+
+### Request
+
+Rename the local repository folders to match the new InkFig GitHub repository names.
+
+### Changes
+
+- Renamed the local folder from `delivery-main-system` to `inkfig-main-system`.
+- Updated `origin` from the legacy redirected repository URL to the canonical `inkfig-main-system` GitHub URL.
+- Removed only the empty old folder remnant left by the Windows move operation.
+- Intentionally left application code, configuration values, dependencies, and runtime behavior unchanged.
+
+### Repositories
+
+- `inkfig-main-system`: renamed its local folder and updated its canonical `origin` URL.
+- `inkfig-user-system`: renamed its local folder and updated its canonical `origin` URL.
+- `inkfig-user-FE`: renamed its local folder and updated its canonical `origin` URL.
+
+### Files
+
+- `AGENT_FEATURE_LOG.md`: recorded the local folder and remote URL alignment.
+- No application files changed.
+
+### API
+
+No API changes.
+
+### Database
+
+No migration required.
+
+### Permissions and scope
+
+- No permissions, roles, authorization checks, or access scopes changed.
+- Backend authorization behavior is unchanged.
+
+### Frontend
+
+No frontend changes.
+
+### Verification
+
+- `[passed] git status --short --branch` - repository remained clean after the move.
+- `[passed] git remote get-url origin` - canonical InkFig remote URL is configured.
+- `[passed] git ls-remote --exit-code origin refs/heads/main` - renamed GitHub repository is reachable.
+- `[passed] workspace directory inspection` - only the three new repository folder names remain.
+- `[not run] application tests and builds` - no application files changed.
+
+### Deployment
+
+- Update local scripts or external deployment jobs that still reference the old `delivery-main-system` folder or repository URL.
+- No migrations must run before deployment.
+
+### Git
+
+- Branch: `main`
+- Commit: `070f7e1`
+- Push: `successful`
+
+### Notes
+
+The old GitHub URL redirected successfully, but the canonical URL is now configured directly.
