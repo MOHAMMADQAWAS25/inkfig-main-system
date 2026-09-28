@@ -39,7 +39,7 @@ This document records the initial product direction, not a complete specificatio
 
 ## Development
 
-This backend uses Python 3.13, FastAPI, PostgreSQL, and the practical clean architecture documented in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+This backend uses Python 3.12, FastAPI, PostgreSQL, and the practical clean architecture documented in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ```powershell
 py -m pip install -r requirements.txt
