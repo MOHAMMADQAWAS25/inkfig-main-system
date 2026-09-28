@@ -58,4 +58,6 @@ sam build
 sam deploy --guided
 ```
 
-During guided deployment, provide the trusted frontend origins as a JSON array and provide the backend-only Supabase values. Use the Supabase Session Pooler connection for `DatabaseUrl`. Do not store secrets in `samconfig.toml` or commit them to Git.
+During guided deployment, provide the trusted frontend origins as a JSON array, the backend-only Supabase values, and an ACM `CertificateArn` valid for `main-api.inkfig-hu.com`. The certificate must be in the deployment region (`eu-west-1` by default). Use the Supabase Session Pooler connection for `DatabaseUrl`. Do not store secrets in `samconfig.toml` or commit them to Git.
+
+After deployment, copy the `CloudflareCnameTarget` stack output into a Cloudflare CNAME record named `main-api`. Keep the record DNS-only while validating the setup; Cloudflare proxying can be enabled afterward with SSL/TLS mode set to Full (strict).

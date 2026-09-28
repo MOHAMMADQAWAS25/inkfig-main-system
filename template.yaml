@@ -25,6 +25,9 @@ Parameters:
     Type: String
     NoEcho: true
     Description: SQLAlchemy asyncpg URL using the Supabase Session Pooler.
+  CertificateArn:
+    Type: String
+    Description: ACM certificate ARN for main-api.inkfig-hu.com in the deployment region.
   ProjectName:
     Type: String
     Default: inkfig
@@ -59,6 +62,26 @@ Resources:
         Service: main-system
         Environment: !Ref Environment
 
+  ApiDomainName:
+    Type: AWS::ApiGatewayV2::DomainName
+    Properties:
+      DomainName: main-api.inkfig-hu.com
+      DomainNameConfigurations:
+        - CertificateArn: !Ref CertificateArn
+          EndpointType: REGIONAL
+          SecurityPolicy: TLS_1_2
+      Tags:
+        Project: !Ref ProjectName
+        Service: main-system
+        Environment: !Ref Environment
+
+  ApiDomainMapping:
+    Type: AWS::ApiGatewayV2::ApiMapping
+    Properties:
+      ApiId: !Ref HttpApi
+      DomainName: !Ref ApiDomainName
+      Stage: $default
+
   ApiFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -90,3 +113,9 @@ Outputs:
   ApiFunctionArn:
     Description: Main-system Lambda function ARN.
     Value: !GetAtt ApiFunction.Arn
+  CustomDomainUrl:
+    Description: Public custom URL for the InkFig main system.
+    Value: https://main-api.inkfig-hu.com
+  CloudflareCnameTarget:
+    Description: Set the Cloudflare main-api CNAME target to this API Gateway hostname.
+    Value: !GetAtt ApiDomainName.RegionalDomainName
