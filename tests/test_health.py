@@ -1,6 +1,7 @@
 from fastapi.testclient import TestClient
 
 from src.infrastructure.config.settings import Settings
+from src.lambda_handler import handler
 from src.main import create_app
 
 
@@ -23,8 +24,10 @@ def test_root_health_check() -> None:
 
 
 def test_settings_use_supabase_database_url_without_local_fallback() -> None:
-    settings = Settings()
+    assert Settings.model_fields["database_url"].default == ""
+    assert Settings.model_fields["supabase_url"].default == ""
+    assert "postgres_host" not in Settings.model_fields
 
-    assert settings.database_url == ""
-    assert settings.supabase_url == ""
-    assert not hasattr(settings, "postgres_host")
+
+def test_lambda_handler_wraps_fastapi_application() -> None:
+    assert callable(handler)

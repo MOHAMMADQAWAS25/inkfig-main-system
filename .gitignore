@@ -24,6 +24,7 @@ TestResults.xml
 
 ### Python / FastAPI ###
 .env
+.aws-sam/
 .mypy_cache/
 .pytest_cache/
 .ruff_cache/

@@ -1,0 +1,92 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: InkFig Main System FastAPI Lambda
+
+Parameters:
+  Environment:
+    Type: String
+    Default: production
+    AllowedValues:
+      - development
+      - staging
+      - production
+    Description: Application environment name.
+  CorsOrigins:
+    Type: String
+    Description: JSON array of trusted frontend origins for FastAPI CORS.
+  SupabaseUrl:
+    Type: String
+    Description: Supabase project URL.
+  SupabaseSecretKey:
+    Type: String
+    NoEcho: true
+    Description: Backend-only Supabase secret key.
+  DatabaseUrl:
+    Type: String
+    NoEcho: true
+    Description: SQLAlchemy asyncpg URL using the Supabase Session Pooler.
+  ProjectName:
+    Type: String
+    Default: inkfig
+    Description: Project tag used for AWS resource organization and cost allocation.
+
+Globals:
+  Function:
+    Runtime: python3.13
+    Architectures:
+      - x86_64
+    Timeout: 30
+    MemorySize: 512
+    Tracing: Active
+    Environment:
+      Variables:
+        APP_NAME: inkfig-main-system
+        ENVIRONMENT: !Ref Environment
+        API_PREFIX: /api/v1
+        CORS_ORIGINS: !Ref CorsOrigins
+        SUPABASE_URL: !Ref SupabaseUrl
+        SUPABASE_SECRET_KEY: !Ref SupabaseSecretKey
+        DATABASE_URL: !Ref DatabaseUrl
+
+Resources:
+  HttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      Name: !Sub "${AWS::StackName}-http-api"
+      StageName: $default
+      Tags:
+        Project: !Ref ProjectName
+        Service: main-system
+        Environment: !Ref Environment
+
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${AWS::StackName}-api"
+      CodeUri: .
+      Handler: src.lambda_handler.handler
+      Tags:
+        Project: !Ref ProjectName
+        Service: main-system
+        Environment: !Ref Environment
+      Events:
+        Root:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /
+            Method: ANY
+        Proxy:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /{proxy+}
+            Method: ANY
+
+Outputs:
+  ApiUrl:
+    Description: API Gateway endpoint for the InkFig main system.
+    Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com"
+  ApiFunctionArn:
+    Description: Main-system Lambda function ARN.
+    Value: !GetAtt ApiFunction.Arn
