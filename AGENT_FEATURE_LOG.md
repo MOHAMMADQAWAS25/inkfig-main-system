@@ -461,3 +461,66 @@ No frontend changes.
 ### Notes
 
 Cloudflare DNS cannot be completed until AWS deploys the custom domain and returns its unique regional hostname. If Cloudflare proxying is enabled later, use Full (strict) SSL/TLS mode.
+## 2026-09-29 - Order API domain mapping after stage creation
+
+### Request
+
+Fix the API Gateway custom-domain deployment failure reporting `Invalid stage identifier specified` while creating the domain mapping.
+
+### Changes
+
+- Added an explicit CloudFormation dependency so `ApiDomainMapping` waits for the SAM-generated `$default` HTTP API stage.
+- Applied the correction to both backends to prevent the same creation-order race during fresh deployments or resource replacement.
+- Preserved locally generated `samconfig.toml` deployment values without committing them.
+- Left application behavior, API contracts, authorization, and database access unchanged.
+
+### Repositories
+
+- `inkfig-main-system`: added the stage dependency as a preventive correction.
+- `inkfig-user-system`: added the stage dependency that resolves the observed failed deployment.
+
+### Files
+
+- `template.yaml`: made `ApiDomainMapping` depend on `HttpApiApiGatewayDefaultStage`.
+- `AGENT_FEATURE_LOG.md`: recorded this ticket.
+
+### API
+
+No API changes.
+
+### Database
+
+No migration required.
+
+### Permissions and scope
+
+- No permissions, roles, or access scopes changed.
+- Existing backend authorization remains backend-enforced.
+
+### Frontend
+
+No frontend changes.
+
+### Verification
+
+- `[passed] sam validate --lint`
+- `[passed] sam build`
+- `[passed] py -m pytest` — 4 tests passed.
+- `[passed] py -m mypy src tests` — no issues in 30 source files.
+- `[passed] git diff --check -- template.yaml`
+
+### Deployment
+
+- No immediate redeployment is required for the already healthy main-system stack.
+- Future deployments will wait for the HTTP API stage before creating or replacing the domain mapping.
+- No migration is required and no new environment variables are needed.
+
+### Git
+
+- Branch: `main`
+- Commit: `8fa6fe0`
+- Push: `successful`
+
+### Notes
+
+The user-system failure occurred because CloudFormation created the mapping concurrently with its stage; the certificate and domain resource were valid.
