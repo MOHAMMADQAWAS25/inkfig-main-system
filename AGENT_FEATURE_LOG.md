@@ -650,3 +650,68 @@ No deployment changes or special steps.
 ### Notes
 
 This entry records understanding only; it does not claim that planned product capabilities are already implemented.
+## 2026-09-29 - Preserve JSON configuration in automated SAM deployment
+
+### Request
+
+Fix the automated deployment after the production health check returned HTTP 500 following an otherwise successful GitHub Actions deployment.
+
+### Changes
+
+- Diagnosed the Lambda startup failure from CloudWatch as an invalid `CORS_ORIGINS` value; the command-line SAM override had deployed only `[` instead of a JSON array.
+- Replaced shell-expanded SAM overrides with an ephemeral structured JSON parameter file generated on the GitHub runner.
+- Preserved the exact production CORS JSON and passed Supabase, database, and certificate secrets without printing them.
+- Applied the same correction to both backend workflows to prevent an identical failure in the user service.
+- Left application behavior, API contracts, authorization, and database schema unchanged.
+
+### Repositories
+
+- `inkfig-main-system`: fixed the workflow responsible for the observed production 500.
+- `inkfig-user-system`: applied the same safe parameter handling proactively.
+
+### Files
+
+- `.github/workflows/deploy.yml`: generates and supplies a structured SAM deployment-parameter file.
+- `AGENT_FEATURE_LOG.md`: recorded this ticket.
+
+### API
+
+No API changes.
+
+### Database
+
+No migration required.
+
+### Permissions and scope
+
+- GitHub OIDC and AWS IAM permissions remain unchanged.
+- No application permissions, roles, or authorization scopes changed.
+
+### Frontend
+
+No frontend changes.
+
+### Verification
+
+- `[passed] CloudWatch log inspection` — identified `SettingsError` while parsing `cors_origins`.
+- `[passed] deployed Lambda configuration inspection` — confirmed the malformed value was only `[` without exposing secrets.
+- `[passed] Python YAML parse of .github/workflows/deploy.yml`
+- `[passed] py -m pytest` — 4 tests passed.
+- `[passed] py -m mypy src tests` — no issues in 30 source files.
+- `[passed] git diff --check -- .github/workflows/deploy.yml`
+- `[not run] corrected GitHub Actions deployment` — triggered by pushing this fix and verified after the push.
+
+### Deployment
+
+- Pushing this correction triggers deployment of the `inkfig-main-system` stack and its production health check.
+- No environment-secret changes or database migrations are required.
+
+### Git
+
+- Branch: `main`
+- Commit: `9c64526`
+- Push: `successful`
+
+### Notes
+
+The production outage was caused by command-line quoting, not FastAPI application logic or the Lambda runtime.
