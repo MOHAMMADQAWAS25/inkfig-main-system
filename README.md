@@ -61,3 +61,17 @@ sam deploy --guided
 During guided deployment, provide the trusted frontend origins as a JSON array, the backend-only Supabase values, and an ACM `CertificateArn` valid for `main-api.inkfig-hu.com`. The certificate must be in the deployment region (`eu-west-1` by default). Use the Supabase Session Pooler connection for `DatabaseUrl`. Do not store secrets in `samconfig.toml` or commit them to Git.
 
 After deployment, copy the `CloudflareCnameTarget` stack output into a Cloudflare CNAME record named `main-api`. Keep the record DNS-only while validating the setup; Cloudflare proxying can be enabled afterward with SSL/TLS mode set to Full (strict).
+
+### Automatic GitHub deployment
+
+Every push to `main` runs tests and mypy, validates and builds the SAM application, deploys the `inkfig-main-system` stack, and checks the production health endpoint. The workflow uses GitHub OIDC for temporary AWS credentials.
+
+Create a protected GitHub environment named `production` and configure these repository or environment secrets:
+
+- `AWS_DEPLOY_ROLE_ARN`: ARN of an AWS IAM role trusted only by this repository's `main` branch through GitHub OIDC.
+- `SUPABASE_URL`: production Supabase project URL.
+- `SUPABASE_SECRET_KEY`: production backend secret key.
+- `DATABASE_URL`: production SQLAlchemy asyncpg Session Pooler URL.
+- `ACM_CERTIFICATE_ARN`: ACM certificate ARN for the API custom domain in `eu-west-1`.
+
+The deployment role must be authorized to upload SAM artifacts, manage this CloudFormation stack, pass the generated Lambda execution role, and manage the Lambda and API Gateway resources declared by the template. Do not store AWS access keys or backend secrets in the repository.
