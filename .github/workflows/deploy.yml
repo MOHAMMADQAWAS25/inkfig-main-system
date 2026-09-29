@@ -84,7 +84,7 @@ jobs:
               "CertificateArn": os.environ["ACM_CERTIFICATE_ARN"],
               "ProjectName": "inkfig",
           }
-          path = Path(os.environ["RUNNER_TEMP"]) / "deploy-parameters.json"
+          path = Path(os.environ["RUNNER_TEMP"]) / "deploy-parameters.yaml"
           path.write_text(json.dumps(parameters), encoding="utf-8")
           with Path(os.environ["GITHUB_ENV"]).open("a", encoding="utf-8") as env_file:
               env_file.write(f"DEPLOY_PARAMETERS_FILE={path}\n")
