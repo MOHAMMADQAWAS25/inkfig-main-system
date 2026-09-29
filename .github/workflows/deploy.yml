@@ -17,7 +17,6 @@ concurrency:
 env:
   AWS_REGION: eu-west-1
   STACK_NAME: inkfig-main-system
-  CORS_ORIGINS: '["https://inkfig-hu.com"]'
 
 jobs:
   test-and-deploy:
@@ -64,12 +63,34 @@ jobs:
       - name: Build SAM application
         run: sam build
 
-      - name: Deploy main backend
+      - name: Prepare deployment parameters
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           ACM_CERTIFICATE_ARN: ${{ secrets.ACM_CERTIFICATE_ARN }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          parameters = {
+              "Environment": "production",
+              "CorsOrigins": json.dumps(["https://inkfig-hu.com"]),
+              "SupabaseUrl": os.environ["SUPABASE_URL"],
+              "SupabaseSecretKey": os.environ["SUPABASE_SECRET_KEY"],
+              "DatabaseUrl": os.environ["DATABASE_URL"],
+              "CertificateArn": os.environ["ACM_CERTIFICATE_ARN"],
+              "ProjectName": "inkfig",
+          }
+          path = Path(os.environ["RUNNER_TEMP"]) / "deploy-parameters.json"
+          path.write_text(json.dumps(parameters), encoding="utf-8")
+          with Path(os.environ["GITHUB_ENV"]).open("a", encoding="utf-8") as env_file:
+              env_file.write(f"DEPLOY_PARAMETERS_FILE={path}\n")
+          PY
+
+      - name: Deploy main backend
         run: |
           sam deploy \
             --stack-name "$STACK_NAME" \
@@ -79,15 +100,7 @@ jobs:
             --capabilities CAPABILITY_IAM \
             --no-confirm-changeset \
             --no-fail-on-empty-changeset \
-            --parameter-overrides \
-              Environment=production \
-              "CorsOrigins=$CORS_ORIGINS" \
-              "SupabaseUrl=$SUPABASE_URL" \
-              "SupabaseSecretKey=$SUPABASE_SECRET_KEY" \
-              "DatabaseUrl=$DATABASE_URL" \
-              "CertificateArn=$ACM_CERTIFICATE_ARN" \
-              ProjectName=inkfig
+            --parameter-overrides "file://$DEPLOY_PARAMETERS_FILE"
 
       - name: Verify production health
         run: curl --fail --silent --show-error https://main-api.inkfig-hu.com/health
-
