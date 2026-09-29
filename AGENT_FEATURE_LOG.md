@@ -593,3 +593,60 @@ No frontend changes.
 ### Notes
 
 The first workflow run will fail at AWS authentication until `AWS_DEPLOY_ROLE_ARN` and the other required secrets exist. Local `samconfig.toml` changes were preserved and intentionally excluded.
+## 2026-09-29 - Review and map the current project foundation
+
+### Request
+
+Read the InkFig repositories and establish an accurate understanding of the product, service boundaries, implementation status, and deployment model before future feature work.
+
+### Changes
+
+- Reviewed the product documentation, architecture rules, runtime entry points, health request flow, configuration, tests, SAM infrastructure, and deployment workflow.
+- Confirmed this service owns artwork, portfolios, discovery, likes, recommendations, search, events, submissions, moderation, and reports, while identity and access management belong to the user system.
+- Confirmed the repository currently provides architecture and deployment foundations plus health endpoints; domain workflows and persistence implementations are not yet implemented.
+- Intentionally left application behavior and configuration unchanged.
+
+### Repositories
+
+- `inkfig-main-system`: reviewed and documented the current main-backend baseline.
+- `inkfig-user-system`: reviewed alongside this service to verify ownership boundaries.
+- `inkfig-user-FE`: reviewed alongside this service to verify client integration and deployment boundaries.
+
+### Files
+
+- `AGENT_FEATURE_LOG.md`: recorded the project-understanding pass.
+
+### API
+
+No API changes.
+
+### Database
+
+No migration required.
+
+### Permissions and scope
+
+No permissions, roles, authorization behavior, or access scopes changed.
+
+### Frontend
+
+No frontend changes.
+
+### Verification
+
+- `[passed] repository source, architecture, configuration, tests, and deployment files reviewed`
+- `[passed] git diff --check`
+- `[not run] application tests and builds` - documentation-only change.
+
+### Deployment
+
+No deployment changes or special steps.
+
+### Git
+
+- Branch: `main`
+- Commit and push: performed after verification.
+
+### Notes
+
+This entry records understanding only; it does not claim that planned product capabilities are already implemented.
