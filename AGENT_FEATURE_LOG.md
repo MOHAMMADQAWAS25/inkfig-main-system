@@ -524,3 +524,72 @@ No frontend changes.
 ### Notes
 
 The user-system failure occurred because CloudFormation created the mapping concurrently with its stage; the certificate and domain resource were valid.
+## 2026-09-29 - Deploy the main backend from GitHub Actions
+
+### Request
+
+Automatically test and deploy the main backend to AWS whenever changes are pushed to the `main` branch.
+
+### Changes
+
+- Added a GitHub Actions workflow triggered by pushes to `main` and manual dispatches.
+- Added Python 3.12 dependency installation, pytest, mypy, SAM validation, SAM build, non-interactive deployment, and production health verification.
+- Used GitHub OIDC and temporary AWS credentials instead of permanent AWS access keys.
+- Serialized production deployments to prevent overlapping CloudFormation updates.
+- Passed production backend configuration from GitHub secrets without relying on local `samconfig.toml` values.
+- Documented the required GitHub environment, secrets, and AWS deployment-role responsibilities.
+- Left runtime behavior, APIs, authorization, and database schema unchanged.
+
+### Repositories
+
+- `inkfig-main-system`: added automated deployment for the main backend.
+- `inkfig-user-system`: added the corresponding user-backend deployment workflow.
+
+### Files
+
+- `.github/workflows/deploy.yml`: tests, validates, builds, deploys, and health-checks the main backend.
+- `README.md`: documents OIDC and required GitHub secrets.
+- `AGENT_FEATURE_LOG.md`: recorded this ticket.
+
+### API
+
+No API changes.
+
+### Database
+
+No migration required.
+
+### Permissions and scope
+
+- The workflow requests only `contents: read` and `id-token: write` GitHub permissions.
+- AWS access is obtained through an IAM role restricted by its GitHub OIDC trust policy and AWS permissions.
+- No application roles or backend authorization rules changed.
+
+### Frontend
+
+No frontend changes.
+
+### Verification
+
+- `[passed] Python YAML parse of .github/workflows/deploy.yml`
+- `[passed] py -m pytest` — 4 tests passed.
+- `[passed] py -m mypy src tests` — no issues in 30 source files.
+- `[passed] git diff --check -- .github/workflows/deploy.yml README.md`
+- `[not run] GitHub Actions deployment` — requires the production environment, OIDC role, and repository secrets to be configured in GitHub.
+
+### Deployment
+
+- Configure the GitHub `production` environment and the documented secrets before relying on automatic deployment.
+- Configure the AWS GitHub OIDC provider and deployment role, restricted to this repository's `main` branch.
+- After setup, every push to `main` deploys the `inkfig-main-system` stack in `eu-west-1`.
+- No migration is required.
+
+### Git
+
+- Branch: `main`
+- Commit: `7c6c91c`
+- Push: `successful`
+
+### Notes
+
+The first workflow run will fail at AWS authentication until `AWS_DEPLOY_ROLE_ARN` and the other required secrets exist. Local `samconfig.toml` changes were preserved and intentionally excluded.
