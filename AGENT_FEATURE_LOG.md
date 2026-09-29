@@ -715,3 +715,62 @@ No frontend changes.
 ### Notes
 
 The production outage was caused by command-line quoting, not FastAPI application logic or the Lambda runtime.
+## 2026-09-29 - Use a SAM-supported deployment parameter file
+
+### Request
+
+Complete the automated CORS recovery after the first structured-parameter workflow run failed immediately in the SAM deploy step.
+
+### Changes
+
+- Changed the ephemeral parameter filename from `.json` to `.yaml`, one of the file extensions supported by the installed SAM CLI parameter parser.
+- Retained JSON-formatted content because JSON is valid YAML and preserves the CORS array and secret strings exactly.
+- Left application behavior, APIs, authorization, infrastructure resources, and database schema unchanged.
+
+### Repositories
+
+- `inkfig-main-system`: corrected the deployment parameter-file extension.
+- `inkfig-user-system`: applied the same correction.
+
+### Files
+
+- `.github/workflows/deploy.yml`: writes the structured parameter document with a SAM-supported `.yaml` extension.
+- `AGENT_FEATURE_LOG.md`: recorded this ticket.
+
+### API
+
+No API changes.
+
+### Database
+
+No migration required.
+
+### Permissions and scope
+
+- No GitHub, AWS IAM, application permission, role, or scope changes.
+
+### Frontend
+
+No frontend changes.
+
+### Verification
+
+- `[passed] installed SAM CLI parameter parser loaded the YAML file and returned ["https://inkfig-hu.com"] exactly`
+- `[passed] Python YAML parse of .github/workflows/deploy.yml`
+- `[passed] git diff --check -- .github/workflows/deploy.yml`
+- `[failed] prior corrected GitHub Actions deployment` — SAM rejected `.json` as an unsupported parameter-file extension before contacting CloudFormation.
+
+### Deployment
+
+- Pushing this correction triggers the main production deployment again.
+- No secret, configuration-value, or migration changes are required.
+
+### Git
+
+- Branch: `main`
+- Commit: `2b04744`
+- Push: `successful`
+
+### Notes
+
+The parameter document remains structured and ephemeral; only its extension changed for SAM CLI compatibility.
