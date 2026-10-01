@@ -97,7 +97,37 @@ class SqlAlchemyWorkRepository:
         self, viewer_id: UUID | None, limit: int, before: datetime | None
     ) -> list[WorkResponse]:
         stmt = text(
-            """select w.work_id,w.owner_user_id,coalesce(p.full_name,'InkFig artist') artist_name,w.type_id,t.name_en,t.name_ar,w.title,w.description,w.storage_path,w.mime_type,w.created_at,count(l.user_id) like_count,coalesce(bool_or(l.user_id=:viewer),false) liked from works w join work_types t on t.type_id=w.type_id left join user_profiles p on p.user_id=w.owner_user_id left join work_likes l on l.work_id=w.work_id where w.status='published' and (:before is null or w.created_at<:before) group by w.work_id,p.full_name,t.type_id order by w.created_at desc limit :limit"""
+            """
+            select
+                w.work_id,
+                w.owner_user_id,
+                coalesce(p.full_name, 'InkFig artist') as artist_name,
+                w.type_id,
+                t.name_en,
+                t.name_ar,
+                w.title,
+                w.description,
+                w.storage_path,
+                w.mime_type,
+                w.created_at,
+                count(l.user_id) as like_count,
+                coalesce(
+                    bool_or(l.user_id = cast(:viewer as uuid)),
+                    false
+                ) as liked
+            from works w
+            join work_types t on t.type_id = w.type_id
+            left join user_profiles p on p.user_id = w.owner_user_id
+            left join work_likes l on l.work_id = w.work_id
+            where w.status = 'published'
+              and (
+                  cast(:before as timestamptz) is null
+                  or w.created_at < cast(:before as timestamptz)
+              )
+            group by w.work_id, p.full_name, t.type_id
+            order by w.created_at desc
+            limit :limit
+            """
         )
         rows = (
             await self._session.execute(
