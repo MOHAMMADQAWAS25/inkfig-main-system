@@ -48,6 +48,23 @@ uvicorn src.main:app --reload
 
 The health endpoint is available at `/health` and `/api/v1/health`.
 
+### Artwork foundation
+
+Published artwork is publicly readable. Creating upload URLs, publishing a work,
+and adding or removing likes require an InkFig access token. Images are uploaded
+directly from the browser to the public Supabase Storage `works` bucket through a
+short-lived signed upload URL; the Supabase service key remains backend-only.
+
+Run database migrations before deploying a backend version that depends on them:
+
+```powershell
+python -m migrations.run
+```
+
+The initial migration creates `work_types`, `works`, and `work_likes`, and prepares
+the Storage bucket. It intentionally does not seed work types; the official list
+will be added in a later migration.
+
 ## AWS Lambda deployment
 
 AWS SAM packages the FastAPI application through Mangum using [`template.yaml`](template.yaml). Validate and deploy with:
@@ -73,5 +90,6 @@ Create a protected GitHub environment named `production` and configure these rep
 - `SUPABASE_SECRET_KEY`: production backend secret key.
 - `DATABASE_URL`: production SQLAlchemy asyncpg Session Pooler URL.
 - `ACM_CERTIFICATE_ARN`: ACM certificate ARN for the API custom domain in `eu-west-1`.
+- `JWT_SECRET`: the same signing secret used by `inkfig-user-system` so this service can validate access tokens.
 
 The deployment role must be authorized to upload SAM artifacts, manage this CloudFormation stack, pass the generated Lambda execution role, and manage the Lambda and API Gateway resources declared by the template. Do not store AWS access keys or backend secrets in the repository.

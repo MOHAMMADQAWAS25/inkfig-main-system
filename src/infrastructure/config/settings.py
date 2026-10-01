@@ -11,6 +11,9 @@ class Settings(BaseSettings):
     supabase_url: str = ""
     supabase_secret_key: str = ""
     database_url: str = ""
+    jwt_secret: str = ""
+    jwt_issuer: str = "inkfig-user-system"
+    works_bucket: str = "works"
 
     model_config = SettingsConfigDict(
         env_file=".env",
