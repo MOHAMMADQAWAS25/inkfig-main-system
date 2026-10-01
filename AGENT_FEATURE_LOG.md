@@ -774,3 +774,87 @@ No frontend changes.
 ### Notes
 
 The parameter document remains structured and ephemeral; only its extension changed for SAM CLI compatibility.
+## 2026-10-01 - Public artwork upload and feed foundation
+
+### Request
+
+Prepare the backend and database so every user can upload typed artwork, store image files in Supabase, publish the work publicly, and allow authenticated users to like it. Official system work types will be supplied later.
+
+### Changes
+
+- Added a clean-architecture works domain with DTOs, service contracts, repository implementation, FastAPI routes, and Supabase Storage integration.
+- Added a two-stage upload workflow: the authenticated owner requests a signed upload URL, uploads directly to Supabase Storage, and then publishes only after the backend verifies that the object exists.
+- Added a public cursor-ready feed and authenticated, idempotent like/unlike operations.
+- Added JWT validation compatible with access tokens issued by `inkfig-user-system`; the Supabase service key remains backend-only.
+- Added automated database migration execution to the production deployment workflow.
+- Intentionally left the work-type table empty until the official system types are provided.
+
+### Repositories
+
+- `inkfig-main-system`: added works APIs, persistence, storage integration, database migration, tests, and deployment configuration.
+- `inkfig-user-FE`: consumes these APIs in a separate repository change.
+
+### Files
+
+- `migrations/20261001_001_create_works.sql`: creates the works schema and configures the Storage bucket.
+- `migrations/run.py`: applies tracked migrations idempotently and verifies the works schema.
+- `src/app/services/work_service.py`: implements upload, publish, feed, and like workflows.
+- `src/infrastructure/repositories/work_repository.py`: implements PostgreSQL work persistence and feed queries.
+- `src/infrastructure/integrations/supabase_storage.py`: creates signed upload URLs and verifies stored objects.
+- `src/interface/api/routes/works.py`: exposes the works HTTP API.
+- `template.yaml`: supplies JWT and works configuration to Lambda.
+- `.github/workflows/deploy.yml`: passes the JWT secret and runs migrations before deployment.
+- `tests/test_work_service.py`: verifies core ownership, file validation, publication, and feed behavior.
+
+### API
+
+- `GET /api/v1/works/types`: publicly lists active system work types.
+- `GET /api/v1/works`: publicly lists published works; accepts `limit` from 1 to 50 and an optional `before` timestamp, and includes viewer-like state when a valid bearer token is supplied.
+- `POST /api/v1/works/uploads`: requires authentication; validates type, title, description, supported image MIME type, and a maximum 10 MiB size, then returns a work ID and short-lived signed upload URL.
+- `POST /api/v1/works/{work_id}/publish`: requires the owning user and an existing uploaded object; returns 404 when the owned draft or object is unavailable.
+- `PUT /api/v1/works/{work_id}/like`: requires authentication and idempotently likes a published work.
+- `DELETE /api/v1/works/{work_id}/like`: requires authentication and idempotently removes the user's like.
+
+### Database
+
+- Migration: `20261001_001_create_works.sql`
+- Creates `work_types`, `works`, and `work_likes`, including ownership/type foreign keys, unique storage paths, size/status checks, public-feed and owner indexes, timestamps, and cascading cleanup for owned works and likes.
+- Creates or updates the public `works` Storage bucket with a 10 MiB limit and JPEG, PNG, WebP, and GIF MIME restrictions.
+- Enables RLS and removes direct anon/authenticated table grants; database access remains backend-controlled through the service role/PostgreSQL connection.
+- No type rows are backfilled. Rollback requires preserving or deliberately removing uploaded Storage objects separately from relational rows.
+
+### Permissions and scope
+
+- Public visitors can read active types and published works.
+- Any authenticated InkFig user can prepare uploads and like or unlike published works.
+- Only the work owner can publish that work's draft; ownership is validated by backend database predicates.
+- Authentication and authorization are validated by the backend using the shared JWT signing secret and issuer.
+
+### Frontend
+
+- No frontend changes in this repository; `inkfig-user-FE` contains the upload page and public-feed integration.
+
+### Verification
+
+- `[passed] uv run --with-requirements requirements.txt ruff check src tests`
+- `[passed] uv run --with-requirements requirements.txt pytest — 8 tests passed`
+- `[passed] uv run --with-requirements requirements.txt mypy src tests — no issues in 43 files`
+- `[passed] python -m migrations.run — migration applied and works tables/public bucket verified`
+- `[passed] sam validate --lint`
+- `[failed] sam build — local machine does not have a Python 3.12 executable on PATH; GitHub Actions installs Python 3.12 before building`
+
+### Deployment
+
+- Deploy `inkfig-main-system`; the workflow runs the database migration before the SAM deployment.
+- Configure `JWT_SECRET` in the main backend production GitHub environment with the same value used by `inkfig-user-system`.
+- Existing `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `DATABASE_URL`, and AWS/ACM secrets remain required.
+
+### Git
+
+- Branch: `main`
+- Commit: `1f2271a`
+- Push: `successful`
+
+### Notes
+
+Signed upload URLs avoid sending image bodies through API Gateway/Lambda. Draft rows can remain if a client requests a URL but never publishes; stale-draft cleanup can be added later. Access-token revocation takes effect in this service when the short-lived token expires because this service validates the signed token without querying the user service on every request.
