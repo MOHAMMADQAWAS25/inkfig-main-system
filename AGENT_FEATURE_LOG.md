@@ -858,3 +858,58 @@ Prepare the backend and database so every user can upload typed artwork, store i
 ### Notes
 
 Signed upload URLs avoid sending image bodies through API Gateway/Lambda. Draft rows can remain if a client requests a URL but never publishes; stale-draft cleanup can be added later. Access-token revocation takes effect in this service when the short-lived token expires because this service validates the signed token without querying the user service on every request.
+
+## 2026-10-01 - Fix nullable public-feed query parameters
+
+### Request
+
+Verify the newly deployed works foundation and correct the public feed after production returned HTTP 500 for an empty unauthenticated request.
+
+### Changes
+
+- Added explicit PostgreSQL casts for nullable viewer UUID and cursor timestamp parameters in the public-feed query.
+- Kept feed ordering, visibility, pagination, and authorization behavior unchanged.
+
+### Repositories
+
+- `inkfig-main-system`: corrected the PostgreSQL public-feed query.
+
+### Files
+
+- `src/infrastructure/repositories/work_repository.py`: casts nullable parameters so asyncpg can prepare the statement.
+
+### API
+
+- `GET /api/v1/works`: now returns an empty feed instead of HTTP 500 when both the optional viewer and cursor are absent.
+
+### Database
+
+- No migration required.
+
+### Permissions and scope
+
+- No permission changes; the feed remains public and optional bearer-token validation remains backend-enforced.
+
+### Frontend
+
+- No frontend changes.
+
+### Verification
+
+- `[passed] direct SqlAlchemyWorkRepository.list_published(None, 21, None) query against Supabase — feed_rows=0`
+- `[passed] production Lambda logs identified asyncpg AmbiguousParameterError before the correction`
+
+### Deployment
+
+- Redeploy `inkfig-main-system` through the existing GitHub Actions workflow.
+- No migration or configuration changes are required.
+
+### Git
+
+- Branch: `main`
+- Commit: `749d701`
+- Push: `successful`
+
+### Notes
+
+The failure was specific to asyncpg preparing untyped null bind parameters; explicit `uuid` and `timestamptz` casts make the statement deterministic.
