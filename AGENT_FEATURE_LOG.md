@@ -990,3 +990,67 @@ The paired frontend change renders the categories as a localized homepage filter
 ### Notes
 
 The migration owns stable category codes while display names remain bilingual and can be updated safely without changing filter URLs.
+## 2026-10-04 - Synchronize main API JWT validation secret
+
+### Request
+
+Fix `Invalid or expired access token.` when an authenticated user attempts to upload a work.
+
+### Changes
+
+- Diagnosed the deployed Lambda configuration and confirmed the user API had a JWT signing secret while the main API secret was empty.
+- Updated the main deployment workflow to securely read the existing signing secret from the deployed user API after AWS authentication.
+- Masks the secret before adding it to the GitHub Actions environment and stops deployment when the source secret is missing.
+- Removed the ineffective dependency on a separate main-repository `JWT_SECRET` GitHub secret.
+- Left token claims, expiry, upload behavior, APIs, and database structure unchanged.
+
+### Repositories
+
+- `inkfig-main-system`: corrected production JWT-secret provisioning and added regression coverage.
+
+### Files
+
+- `.github/workflows/deploy.yml`: retrieves, validates, masks, and passes the shared user API JWT secret into the main SAM stack.
+- `tests/test_health.py`: verifies the deployment cannot regress to an independent or missing JWT secret.
+
+### API
+
+- No API contract changes. Authenticated work endpoints now accept valid access tokens issued by `inkfig-user-system` after deployment.
+
+### Database
+
+- No migration required.
+
+### Permissions and scope
+
+- Existing authenticated-user and work-owner rules are unchanged.
+- JWT signature, issuer, token type, expiry, and subject validation remain backend-enforced.
+- The main GitHub deployment role requires `lambda:GetFunctionConfiguration` for `inkfig-user-system-api`.
+
+### Frontend
+
+- No frontend changes.
+
+### Verification
+
+- `[passed] deployed Lambda configuration comparison — issuer values matched; main secret was confirmed empty without printing either secret`
+- `[passed] uv run --with-requirements requirements.txt ruff check src tests`
+- `[passed] uv run --with-requirements requirements.txt pytest — 10 tests passed`
+- `[passed] uv run --with-requirements requirements.txt mypy src tests — no issues in 43 source files`
+- `[passed] git diff --check`
+
+### Deployment
+
+- Deploy `inkfig-main-system` through GitHub Actions.
+- No migration is required.
+- The user API must remain deployed with a nonempty `JWT_SECRET`; no new frontend or GitHub secret is required.
+
+### Git
+
+- Branch: `main`
+- Commit: `a230f27`
+- Push: `successful`
+
+### Notes
+
+The signing value remains secret and was never printed. A future central AWS Secrets Manager value could replace the user Lambda as the shared source of truth if desired.
