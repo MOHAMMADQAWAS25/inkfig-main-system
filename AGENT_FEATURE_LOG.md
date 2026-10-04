@@ -1179,3 +1179,65 @@ Allow users to attach an optional link to an uploaded work and safely validate i
 ### Notes
 
 Future link-health monitoring should run asynchronously in a hardened checker that blocks private/reserved IPs, limits redirects and response sizes, and applies strict timeouts.
+## 2026-10-04 - Support multiple safe links per work
+
+### Request
+
+Replace the single optional work link with multiple safe links.
+
+### Changes
+
+- Supports up to 10 unique HTTP/HTTPS links per work, each with an optional 120-character label and stable order.
+- Migrates existing single links, stores new links transactionally with the draft, and returns ordered links in the public feed.
+- Rejects unsafe schemes, duplicates, excessive links, and invalid positions. Automatic destination requests remain intentionally excluded to prevent SSRF.
+
+### Repositories
+
+- `inkfig-main-system`: multi-link DTOs, model, persistence, migration, feed response, and tests.
+- `inkfig-user-FE`: multi-link controls and rendering in a paired change.
+
+### Files
+
+- `migrations/20261004_003_create_work_links.sql`: creates and secures `work_links`, backfills old links, and removes the legacy column.
+- `src/entities/dto/works.py`: adds link request/response contracts and uniqueness/count validation.
+- `src/infrastructure/db/postgres/models/work.py`: maps ordered work links.
+- `src/infrastructure/repositories/work_repository.py`: persists and aggregates links.
+
+### API
+
+- `POST /api/v1/works/uploads`: replaces `external_url` with `links`, an optional array of at most 10 `{url,label}` objects.
+- `GET /api/v1/works`: replaces `external_url` with an ordered `links` array.
+
+### Database
+
+- Migration: `20261004_003_create_work_links.sql`
+- Creates `work_links` with cascading work FK, HTTP/HTTPS check, unique work/URL and work/position constraints, order index, RLS, and service-role grants; backfills existing links before dropping `works.external_url`.
+
+### Permissions and scope
+
+- Authenticated users submit links with owned drafts; published links are public. Backend and database enforce safety and scope.
+
+### Frontend
+
+- No frontend changes in this repository.
+
+### Verification
+
+- `[passed] ruff check`
+- `[passed] pytest — 11 tests passed`
+- `[passed] mypy — no issues`
+- `[passed] migration applied and verified`
+
+### Deployment
+
+- Deploy backend before frontend; migration 003 must run first. No configuration changes.
+
+### Git
+
+- Branch: `main`
+- Commit: `eeeeb84`
+- Push: `successful`
+
+### Notes
+
+Health monitoring remains future hardened asynchronous work.
