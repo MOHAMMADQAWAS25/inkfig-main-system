@@ -94,7 +94,11 @@ class SqlAlchemyWorkRepository:
         )
 
     async def list_published(
-        self, viewer_id: UUID | None, limit: int, before: datetime | None
+        self,
+        viewer_id: UUID | None,
+        limit: int,
+        before: datetime | None,
+        type_code: str | None,
     ) -> list[WorkResponse]:
         stmt = text(
             """
@@ -121,6 +125,10 @@ class SqlAlchemyWorkRepository:
             left join work_likes l on l.work_id = w.work_id
             where w.status = 'published'
               and (
+                  cast(:type_code as varchar) is null
+                  or t.code = cast(:type_code as varchar)
+              )
+              and (
                   cast(:before as timestamptz) is null
                   or w.created_at < cast(:before as timestamptz)
               )
@@ -131,7 +139,13 @@ class SqlAlchemyWorkRepository:
         )
         rows = (
             await self._session.execute(
-                stmt, {"viewer": viewer_id, "before": before, "limit": limit}
+                stmt,
+                {
+                    "viewer": viewer_id,
+                    "before": before,
+                    "limit": limit,
+                    "type_code": type_code,
+                },
             )
         ).mappings()
         return [

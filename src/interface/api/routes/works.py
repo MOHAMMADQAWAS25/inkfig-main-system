@@ -39,8 +39,9 @@ async def feed(
     viewer: Annotated[UUID | None, Depends(get_optional_user)],
     limit: int = Query(20, ge=1, le=50),
     before: datetime | None = None,
+    type_code: str | None = Query(default=None, min_length=1, max_length=64),
 ) -> WorkFeedResponse:
-    return await service.feed(viewer, limit, before)
+    return await service.feed(viewer, limit, before, type_code)
 
 
 @router.post("/uploads", response_model=WorkUploadResponse, status_code=201)

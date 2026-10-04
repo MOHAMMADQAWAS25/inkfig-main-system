@@ -50,9 +50,15 @@ class WorkService:
             raise WorkNotFoundError
 
     async def feed(
-        self, viewer_id: UUID | None, limit: int, before: datetime | None
+        self,
+        viewer_id: UUID | None,
+        limit: int,
+        before: datetime | None,
+        type_code: str | None = None,
     ) -> WorkFeedResponse:
-        items = await self._repository.list_published(viewer_id, limit + 1, before)
+        items = await self._repository.list_published(
+            viewer_id, limit + 1, before, type_code
+        )
         next_cursor = items[limit - 1].created_at if len(items) > limit else None
         return WorkFeedResponse(items=items[:limit], next_cursor=next_cursor)
 

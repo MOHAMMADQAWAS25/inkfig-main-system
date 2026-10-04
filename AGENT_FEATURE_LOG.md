@@ -913,3 +913,80 @@ Verify the newly deployed works foundation and correct the public feed after pro
 ### Notes
 
 The failure was specific to asyncpg preparing untyped null bind parameters; explicit `uuid` and `timestamptz` casts make the statement deterministic.
+
+## 2026-10-04 - Add canonical work categories and feed filtering
+
+### Request
+
+Create Digital Art, Hand Art, Video, Audio, Animation, Games, Interactive, and VR/AR categories and support homepage navigation between them.
+
+### Changes
+
+- Added an idempotent migration that inserts or reactivates all eight canonical work types with English and Arabic names.
+- Added an optional `type_code` query parameter to the public works feed.
+- Passed the selected type code through the API route, service, repository contract, and PostgreSQL repository.
+- Added a parameterized work-type predicate to the published-feed query without changing public visibility, pagination, or like behavior.
+- Added service regression coverage proving a category code reaches the repository.
+- Preserved Lambda initialization and dependency construction, so the change remains compatible with future AWS Lambda SnapStart use.
+
+### Repositories
+
+- `inkfig-main-system`: seeds canonical types and filters the public feed authoritatively.
+- `inkfig-user-FE`: provides the localized homepage category controls and sends `type_code`.
+- `inkfig-user-system`: no changes required.
+
+### Files
+
+- `migrations/20261004_001_seed_work_categories.sql`: upserts the eight active bilingual categories.
+- `src/interface/api/routes/works.py`: accepts the optional validated `type_code` filter.
+- `src/app/services/work_service.py`: forwards the filter while preserving pagination.
+- `src/entities/repositories/works.py`: extends the repository contract.
+- `src/infrastructure/repositories/work_repository.py`: applies the parameterized category predicate.
+- `tests/test_work_service.py`: verifies filter propagation.
+- `AGENT_FEATURE_LOG.md`: records this ticket.
+
+### API
+
+- `GET /api/v1/works` accepts optional `type_code` (1-64 characters).
+- Omitting `type_code` preserves the existing all-works feed.
+- Supplying a canonical code returns published works from that category only.
+- Response fields, pagination shape, authentication behavior, and errors are unchanged.
+
+### Database
+
+- Migration required: `20261004_001_seed_work_categories.sql`.
+- The migration is idempotent through `ON CONFLICT (code) DO UPDATE` and reactivates canonical categories.
+
+### Permissions and scope
+
+- The public feed remains publicly readable.
+- Uploads remain authenticated and backend-authorized.
+- Category filtering cannot broaden visibility; it only narrows the existing published feed.
+- Existing service-role-only table access and backend authorization remain authoritative.
+
+### Frontend
+
+The paired frontend change renders the categories as a localized homepage filter and sends the selected canonical code to this endpoint.
+
+### Verification
+
+- `[passed] git diff --check`
+- `[passed] migration-runner inspection` - the existing runner discovers all sorted `*.sql` migrations, including the new seed file.
+- `[not run] pytest, mypy, and compileall` - no Python interpreter is installed or discoverable in this environment.
+- `[not run] sam validate --lint` - AWS SAM CLI is not installed in this environment.
+
+### Deployment
+
+- Deploy `inkfig-main-system` first and run `migrations/run.py` so all eight work types exist before exposing the filter.
+- Deploy `inkfig-user-FE` second.
+- No new environment variables are required.
+
+### Git
+
+- Branch: `main`
+- Commit: this ticket's focused commit.
+- Push: pushed directly to `origin/main` after synchronization.
+
+### Notes
+
+The migration owns stable category codes while display names remain bilingual and can be updated safely without changing filter URLs.

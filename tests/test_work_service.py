@@ -17,6 +17,7 @@ class FakeWorkRepository:
         self.created: tuple[UUID, UUID, str] | None = None
         self.path: str | None = None
         self.published = False
+        self.listed_type_code: str | None = None
 
     async def list_types(self) -> list[WorkTypeResponse]:
         return []
@@ -47,8 +48,10 @@ class FakeWorkRepository:
         viewer_id: UUID | None,
         limit: int,
         before: datetime | None,
+        type_code: str | None,
     ) -> list[WorkResponse]:
         del viewer_id, limit, before
+        self.listed_type_code = type_code
         return []
 
     async def set_like(self, work_id: UUID, user_id: UUID, liked: bool) -> bool:
@@ -121,3 +124,14 @@ async def test_empty_public_feed_has_no_cursor() -> None:
 
     assert result.items == []
     assert result.next_cursor is None
+
+
+@pytest.mark.asyncio
+async def test_public_feed_accepts_category_filter() -> None:
+    repository = FakeWorkRepository()
+    service = WorkService(repository, FakeWorkStorage(), "works")
+
+    result = await service.feed(None, 20, None, "digital-art")
+
+    assert result.items == []
+    assert repository.listed_type_code == "digital-art"
