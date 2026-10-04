@@ -1111,3 +1111,71 @@ No frontend changes.
 ### Notes
 
 The IAM permission is infrastructure state outside the SAM application stack and was applied directly to the existing GitHub deployment role.
+## 2026-10-04 - Add optional external links to works
+
+### Request
+
+Allow users to attach an optional link to an uploaded work and safely validate it.
+
+### Changes
+
+- Added an optional HTTP/HTTPS external URL to work creation and public feed responses.
+- Persists a normalized URL or `null` when no link is supplied.
+- Rejects malformed URLs and non-HTTP schemes through backend DTO validation and a database constraint.
+- Intentionally does not request user-supplied destinations during upload, avoiding SSRF and unreliable availability checks.
+
+### Repositories
+
+- `inkfig-main-system`: added API validation, persistence, feed output, migration, and tests.
+- `inkfig-user-FE`: adds the optional form field and public link presentation separately.
+
+### Files
+
+- `src/entities/dto/works.py`: adds validated request and nullable response URL fields.
+- `src/infrastructure/db/postgres/models/work.py`: maps the nullable URL column.
+- `src/infrastructure/repositories/work_repository.py`: stores and returns work links.
+- `migrations/20261004_002_add_work_external_url.sql`: adds the nullable constrained column.
+- `tests/test_work_service.py`: verifies valid HTTP URLs and rejects unsafe schemes.
+
+### API
+
+- `POST /api/v1/works/uploads`: accepts optional `external_url`; it must be a complete HTTP/HTTPS URL and is limited to 2083 characters.
+- `GET /api/v1/works`: each item now includes nullable `external_url`.
+
+### Database
+
+- Migration: `20261004_002_add_work_external_url.sql`
+- Adds nullable `works.external_url varchar(2083)` with an HTTP/HTTPS check; existing rows remain `null` and require no backfill. Rollback drops the constraint and column.
+
+### Permissions and scope
+
+- Only authenticated users can submit the link as part of an upload draft.
+- Published links are publicly visible with their work.
+- Validation is backend- and database-enforced; no new role or permission is introduced.
+
+### Frontend
+
+- No frontend changes in this repository; corresponding changes are in `inkfig-user-FE`.
+
+### Verification
+
+- `[passed] uv run --with-requirements requirements.txt ruff check src tests migrations`
+- `[passed] uv run --with-requirements requirements.txt pytest — 11 tests passed`
+- `[passed] uv run --with-requirements requirements.txt mypy src tests`
+- `[passed] python -m migrations.run — migration applied and works schema verified`
+- `[passed] git diff --check`
+
+### Deployment
+
+- Deploy `inkfig-main-system` before `inkfig-user-FE`; migration 20261004_002 must run first and is included in the backend workflow.
+- No environment-variable changes are required.
+
+### Git
+
+- Branch: `main`
+- Commit: `517a8ed`
+- Push: `successful`
+
+### Notes
+
+Future link-health monitoring should run asynchronously in a hardened checker that blocks private/reserved IPs, limits redirects and response sizes, and applies strict timeouts.
