@@ -7,6 +7,7 @@ from pydantic import HttpUrl, ValidationError
 from src.app.services.work_service import WorkService
 from src.entities.dto.works import (
     CreateWorkUploadRequest,
+    WorkLinkRequest,
     WorkResponse,
     WorkTypeResponse,
 )
@@ -79,18 +80,22 @@ def upload_request(mime_type: str = "image/png") -> CreateWorkUploadRequest:
         file_name="work.png",
         mime_type=mime_type,
         file_size=1024,
-        external_url=HttpUrl("https://portfolio.example/artwork"),
+        links=[
+            WorkLinkRequest(
+                url=HttpUrl("https://portfolio.example/artwork"), label="Portfolio"
+            )
+        ],
     )
 
 
 def test_work_link_accepts_http_and_rejects_unsafe_schemes() -> None:
-    assert str(upload_request().external_url) == "https://portfolio.example/artwork"
+    assert str(upload_request().links[0].url) == "https://portfolio.example/artwork"
 
     with pytest.raises(ValidationError):
         CreateWorkUploadRequest.model_validate(
             {
                 **upload_request().model_dump(),
-                "external_url": "javascript:alert(1)",
+                "links": [{"url": "javascript:alert(1)"}],
             }
         )
 
@@ -108,7 +113,7 @@ async def test_prepare_upload_scopes_storage_path_to_owner() -> None:
     assert result.object_path.startswith(f"{owner_id}/")
     assert result.object_path.endswith(".png")
     assert result.upload_url.endswith("?token=signed")
-    assert upload_request().external_url is not None
+    assert upload_request().links
 
 
 @pytest.mark.asyncio

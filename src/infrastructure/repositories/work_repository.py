@@ -12,6 +12,7 @@ from src.entities.dto.works import (
 )
 from src.infrastructure.db.postgres.models.work import (
     WorkLikeModel,
+    WorkLinkModel,
     WorkModel,
     WorkTypeModel,
 )
@@ -61,13 +62,22 @@ class SqlAlchemyWorkRepository:
                 type_id=data.type_id,
                 title=data.title.strip(),
                 description=data.description.strip(),
-                external_url=str(data.external_url) if data.external_url else None,
                 storage_bucket=bucket,
                 storage_path=path,
                 mime_type=data.mime_type,
                 file_size=data.file_size,
                 status="draft",
             )
+        )
+        await self._session.flush()
+        self._session.add_all(
+            WorkLinkModel(
+                work_id=work_id,
+                url=str(link.url),
+                label=link.label.strip() if link.label else None,
+                position=position,
+            )
+            for position, link in enumerate(data.links)
         )
         await self._session.commit()
 
@@ -112,7 +122,11 @@ class SqlAlchemyWorkRepository:
                 t.name_ar,
                 w.title,
                 w.description,
-                w.external_url,
+                coalesce(
+                    (select jsonb_agg(jsonb_build_object('url', wl.url, 'label', wl.label) order by wl.position)
+                     from work_links wl where wl.work_id = w.work_id),
+                    '[]'::jsonb
+                ) as links,
                 w.storage_path,
                 w.mime_type,
                 w.created_at,
@@ -160,7 +174,7 @@ class SqlAlchemyWorkRepository:
                 type_name_ar=r.name_ar,
                 title=r.title,
                 description=r.description,
-                external_url=r.external_url,
+                links=r.links,
                 image_url=self._storage.public_url(r.storage_path),
                 mime_type=r.mime_type,
                 like_count=r.like_count,

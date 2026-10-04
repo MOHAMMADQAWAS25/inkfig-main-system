@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field, HttpUrl, model_validator
 
 
 class WorkTypeResponse(BaseModel):
@@ -11,14 +11,31 @@ class WorkTypeResponse(BaseModel):
     name_ar: str
 
 
+class WorkLinkRequest(BaseModel):
+    url: HttpUrl
+    label: str | None = Field(default=None, max_length=120)
+
+
+class WorkLinkResponse(BaseModel):
+    url: str
+    label: str | None = None
+
+
 class CreateWorkUploadRequest(BaseModel):
     type_id: UUID
     title: str = Field(min_length=1, max_length=160)
     description: str = Field(default="", max_length=2000)
-    external_url: HttpUrl | None = None
+    links: list[WorkLinkRequest] = Field(default_factory=list, max_length=10)
     file_name: str = Field(min_length=1, max_length=255)
     mime_type: str
     file_size: int = Field(gt=0, le=10_485_760)
+
+    @model_validator(mode="after")
+    def links_must_be_unique(self) -> "CreateWorkUploadRequest":
+        urls = [str(link.url) for link in self.links]
+        if len(urls) != len(set(urls)):
+            raise ValueError("Work links must be unique.")
+        return self
 
 
 class WorkUploadResponse(BaseModel):
@@ -37,7 +54,7 @@ class WorkResponse(BaseModel):
     type_name_ar: str
     title: str
     description: str
-    external_url: str | None
+    links: list[WorkLinkResponse]
     image_url: str
     mime_type: str
     like_count: int
