@@ -63,13 +63,26 @@ jobs:
       - name: Build SAM application
         run: sam build
 
+      - name: Load shared JWT secret from the user API
+        run: |
+          JWT_SECRET="$(aws lambda get-function-configuration \
+            --function-name inkfig-user-system-api \
+            --region "$AWS_REGION" \
+            --query 'Environment.Variables.JWT_SECRET' \
+            --output text)"
+          if [ -z "$JWT_SECRET" ] || [ "$JWT_SECRET" = "None" ]; then
+            echo "The user API JWT secret is not configured." >&2
+            exit 1
+          fi
+          echo "::add-mask::$JWT_SECRET"
+          echo "JWT_SECRET=$JWT_SECRET" >> "$GITHUB_ENV"
+
       - name: Prepare deployment parameters
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           ACM_CERTIFICATE_ARN: ${{ secrets.ACM_CERTIFICATE_ARN }}
-          JWT_SECRET: ${{ secrets.JWT_SECRET }}
         run: |
           python - <<'PY'
           import json

@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from fastapi.testclient import TestClient
 
 from src.infrastructure.config.settings import Settings
@@ -31,3 +33,12 @@ def test_settings_use_supabase_database_url_without_local_fallback() -> None:
 
 def test_lambda_handler_wraps_fastapi_application() -> None:
     assert callable(handler)
+
+
+def test_deployment_reuses_user_api_jwt_secret() -> None:
+    workflow = Path(".github/workflows/deploy.yml").read_text(encoding="utf-8")
+
+    assert "--function-name inkfig-user-system-api" in workflow
+    assert "Environment.Variables.JWT_SECRET" in workflow
+    assert 'echo "::add-mask::$JWT_SECRET"' in workflow
+    assert "secrets.JWT_SECRET" not in workflow
