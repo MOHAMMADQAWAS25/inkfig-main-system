@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
 import pytest
+from pydantic import HttpUrl, ValidationError
 
 from src.app.services.work_service import WorkService
 from src.entities.dto.works import (
@@ -78,7 +79,20 @@ def upload_request(mime_type: str = "image/png") -> CreateWorkUploadRequest:
         file_name="work.png",
         mime_type=mime_type,
         file_size=1024,
+        external_url=HttpUrl("https://portfolio.example/artwork"),
     )
+
+
+def test_work_link_accepts_http_and_rejects_unsafe_schemes() -> None:
+    assert str(upload_request().external_url) == "https://portfolio.example/artwork"
+
+    with pytest.raises(ValidationError):
+        CreateWorkUploadRequest.model_validate(
+            {
+                **upload_request().model_dump(),
+                "external_url": "javascript:alert(1)",
+            }
+        )
 
 
 @pytest.mark.asyncio
@@ -94,6 +108,7 @@ async def test_prepare_upload_scopes_storage_path_to_owner() -> None:
     assert result.object_path.startswith(f"{owner_id}/")
     assert result.object_path.endswith(".png")
     assert result.upload_url.endswith("?token=signed")
+    assert upload_request().external_url is not None
 
 
 @pytest.mark.asyncio

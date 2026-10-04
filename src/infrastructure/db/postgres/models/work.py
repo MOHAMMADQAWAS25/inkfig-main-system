@@ -36,6 +36,7 @@ class WorkModel(Base):
     )
     title: Mapped[str] = mapped_column(String(160), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    external_url: Mapped[str | None] = mapped_column(String(2083))
     storage_bucket: Mapped[str] = mapped_column(String(64), nullable=False)
     storage_path: Mapped[str] = mapped_column(String(512), unique=True, nullable=False)
     mime_type: Mapped[str] = mapped_column(String(80), nullable=False)

@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, HttpUrl
 
 
 class WorkTypeResponse(BaseModel):
@@ -15,6 +15,7 @@ class CreateWorkUploadRequest(BaseModel):
     type_id: UUID
     title: str = Field(min_length=1, max_length=160)
     description: str = Field(default="", max_length=2000)
+    external_url: HttpUrl | None = None
     file_name: str = Field(min_length=1, max_length=255)
     mime_type: str
     file_size: int = Field(gt=0, le=10_485_760)
@@ -36,6 +37,7 @@ class WorkResponse(BaseModel):
     type_name_ar: str
     title: str
     description: str
+    external_url: str | None
     image_url: str
     mime_type: str
     like_count: int
