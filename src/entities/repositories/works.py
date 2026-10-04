@@ -27,6 +27,8 @@ class WorkRepository(Protocol):
         limit: int,
         before: datetime | None,
         type_code: str | None,
+        owner_id: UUID | None = None,
+        liked_by_id: UUID | None = None,
     ) -> list[WorkResponse]: ...
     async def set_like(self, work_id: UUID, user_id: UUID, liked: bool) -> bool: ...
 

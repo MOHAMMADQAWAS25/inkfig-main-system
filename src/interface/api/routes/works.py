@@ -44,6 +44,26 @@ async def feed(
     return await service.feed(viewer, limit, before, type_code)
 
 
+@router.get("/me", response_model=WorkFeedResponse)
+async def my_works(
+    service: Annotated[WorkService, Depends(get_work_service)],
+    user: Annotated[UUID, Depends(get_current_user)],
+    limit: int = Query(50, ge=1, le=50),
+    before: datetime | None = None,
+) -> WorkFeedResponse:
+    return await service.profile_feed(user, limit, before)
+
+
+@router.get("/likes", response_model=WorkFeedResponse)
+async def liked_works(
+    service: Annotated[WorkService, Depends(get_work_service)],
+    user: Annotated[UUID, Depends(get_current_user)],
+    limit: int = Query(50, ge=1, le=50),
+    before: datetime | None = None,
+) -> WorkFeedResponse:
+    return await service.profile_feed(user, limit, before, liked=True)
+
+
 @router.post("/uploads", response_model=WorkUploadResponse, status_code=201)
 async def prepare_upload(
     request: CreateWorkUploadRequest,

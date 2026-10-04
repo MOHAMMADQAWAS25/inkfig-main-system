@@ -20,6 +20,8 @@ class FakeWorkRepository:
         self.path: str | None = None
         self.published = False
         self.listed_type_code: str | None = None
+        self.listed_owner_id: UUID | None = None
+        self.listed_liked_by_id: UUID | None = None
 
     async def list_types(self) -> list[WorkTypeResponse]:
         return []
@@ -51,9 +53,13 @@ class FakeWorkRepository:
         limit: int,
         before: datetime | None,
         type_code: str | None,
+        owner_id: UUID | None = None,
+        liked_by_id: UUID | None = None,
     ) -> list[WorkResponse]:
         del viewer_id, limit, before
         self.listed_type_code = type_code
+        self.listed_owner_id = owner_id
+        self.listed_liked_by_id = liked_by_id
         return []
 
     async def set_like(self, work_id: UUID, user_id: UUID, liked: bool) -> bool:
@@ -155,3 +161,29 @@ async def test_public_feed_accepts_category_filter() -> None:
 
     assert result.items == []
     assert repository.listed_type_code == "digital-art"
+
+
+@pytest.mark.asyncio
+async def test_profile_feed_scopes_posts_to_authenticated_owner() -> None:
+    repository = FakeWorkRepository()
+    service = WorkService(repository, FakeWorkStorage(), "works")
+    user_id = uuid4()
+
+    result = await service.profile_feed(user_id, 50, None)
+
+    assert result.items == []
+    assert repository.listed_owner_id == user_id
+    assert repository.listed_liked_by_id is None
+
+
+@pytest.mark.asyncio
+async def test_profile_likes_scope_uses_authenticated_user() -> None:
+    repository = FakeWorkRepository()
+    service = WorkService(repository, FakeWorkStorage(), "works")
+    user_id = uuid4()
+
+    result = await service.profile_feed(user_id, 50, None, liked=True)
+
+    assert result.items == []
+    assert repository.listed_owner_id is None
+    assert repository.listed_liked_by_id == user_id

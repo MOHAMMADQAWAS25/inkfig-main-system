@@ -110,6 +110,8 @@ class SqlAlchemyWorkRepository:
         limit: int,
         before: datetime | None,
         type_code: str | None,
+        owner_id: UUID | None = None,
+        liked_by_id: UUID | None = None,
     ) -> list[WorkResponse]:
         stmt = text(
             """
@@ -148,6 +150,18 @@ class SqlAlchemyWorkRepository:
                   cast(:before as timestamptz) is null
                   or w.created_at < cast(:before as timestamptz)
               )
+              and (
+                  cast(:owner_id as uuid) is null
+                  or w.owner_user_id = cast(:owner_id as uuid)
+              )
+              and (
+                  cast(:liked_by_id as uuid) is null
+                  or exists (
+                      select 1 from work_likes profile_like
+                      where profile_like.work_id = w.work_id
+                        and profile_like.user_id = cast(:liked_by_id as uuid)
+                  )
+              )
             group by w.work_id, p.full_name, t.type_id
             order by w.created_at desc
             limit :limit
@@ -161,6 +175,8 @@ class SqlAlchemyWorkRepository:
                     "before": before,
                     "limit": limit,
                     "type_code": type_code,
+                    "owner_id": owner_id,
+                    "liked_by_id": liked_by_id,
                 },
             )
         ).mappings()
