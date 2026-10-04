@@ -1241,3 +1241,72 @@ Replace the single optional work link with multiple safe links.
 ### Notes
 
 Health monitoring remains future hardened asynchronous work.
+
+## 2026-10-04 - Add authenticated profile feeds
+
+### Request
+
+Support a user profile that lists the authenticated user's published posts and the published posts they liked.
+
+### Changes
+
+- Added authenticated, paginated feeds for the current user's published works and liked works.
+- Reused the existing published-work response so profile cards include artwork metadata, ordered links, like counts, and viewer like state.
+- Scoped both queries exclusively from the verified backend user ID; clients cannot request another user's profile collections through these endpoints.
+- Kept the public feed, uploads, likes, storage, and existing schema unchanged.
+
+### Repositories
+
+- `inkfig-main-system`: added backend-authorized profile feed queries.
+- `inkfig-user-FE`: consumes the feeds in the new profile page.
+
+### Files
+
+- `src/interface/api/routes/works.py`: added current-user post and like routes.
+- `src/app/services/work_service.py`: added the profile-feed workflow and pagination.
+- `src/entities/repositories/works.py`: extended the repository contract with owner and liker scopes.
+- `src/infrastructure/repositories/work_repository.py`: added SQL owner and liked-by filtering.
+- `tests/test_work_service.py`: verifies authenticated scope selection.
+
+### API
+
+- `GET /api/v1/works/me`: returns up to 50 published works owned by the authenticated user; supports `limit` and `before`; returns 401 for an invalid or missing token.
+- `GET /api/v1/works/likes`: returns up to 50 published works liked by the authenticated user; supports `limit` and `before`; returns 401 for an invalid or missing token.
+- Existing response fields and public-feed behavior are unchanged.
+
+### Database
+
+No migration required. Queries use the existing `works.owner_user_id` and `work_likes` relationships and existing indexes.
+
+### Permissions and scope
+
+- Both endpoints require a valid InkFig access token.
+- Any authenticated user can read only their own posts and likes collections.
+- User scope is derived and validated by the backend; no user ID is accepted from the client.
+
+### Frontend
+
+- Paired frontend adds the protected profile route, posts section, and Likes section.
+
+### Verification
+
+- `[passed] uv run --with-requirements requirements.txt pytest — 13 tests passed`
+- `[passed] uv run --with-requirements requirements.txt mypy src tests — no issues in 43 source files`
+- `[passed] uv run --with-requirements requirements.txt ruff check src tests`
+- `[passed] uv run --with-requirements requirements.txt ruff format src tests`
+- `[passed] git diff --check`
+
+### Deployment
+
+- Deploy `inkfig-main-system` before `inkfig-user-FE`.
+- No migration or environment-variable changes are required.
+
+### Git
+
+- Branch: `main`
+- Commit: `f050498`
+- Push: `successful`
+
+### Notes
+
+Profile collections currently return the first 50 items; API cursors are available for future load-more UI.
