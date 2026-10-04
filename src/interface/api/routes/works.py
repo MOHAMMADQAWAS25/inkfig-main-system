@@ -18,8 +18,8 @@ from src.entities.exceptions.works import (
     WorkTypeNotFoundError,
 )
 from src.interface.dependencies.authentication import (
-    get_current_user,
     get_optional_user,
+    require_permission,
 )
 from src.interface.dependencies.works import get_work_service
 
@@ -47,7 +47,7 @@ async def feed(
 @router.get("/me", response_model=WorkFeedResponse)
 async def my_works(
     service: Annotated[WorkService, Depends(get_work_service)],
-    user: Annotated[UUID, Depends(get_current_user)],
+    user: Annotated[UUID, Depends(require_permission("profile.read_own"))],
     limit: int = Query(50, ge=1, le=50),
     before: datetime | None = None,
 ) -> WorkFeedResponse:
@@ -57,7 +57,7 @@ async def my_works(
 @router.get("/likes", response_model=WorkFeedResponse)
 async def liked_works(
     service: Annotated[WorkService, Depends(get_work_service)],
-    user: Annotated[UUID, Depends(get_current_user)],
+    user: Annotated[UUID, Depends(require_permission("profile.read_own"))],
     limit: int = Query(50, ge=1, le=50),
     before: datetime | None = None,
 ) -> WorkFeedResponse:
@@ -68,7 +68,7 @@ async def liked_works(
 async def prepare_upload(
     request: CreateWorkUploadRequest,
     service: Annotated[WorkService, Depends(get_work_service)],
-    user: Annotated[UUID, Depends(get_current_user)],
+    user: Annotated[UUID, Depends(require_permission("works.upload"))],
 ) -> WorkUploadResponse:
     try:
         return await service.prepare_upload(user, request)
@@ -86,7 +86,7 @@ async def prepare_upload(
 async def publish(
     work_id: UUID,
     service: Annotated[WorkService, Depends(get_work_service)],
-    user: Annotated[UUID, Depends(get_current_user)],
+    user: Annotated[UUID, Depends(require_permission("works.upload"))],
 ) -> None:
     try:
         await service.publish(work_id, user)
@@ -98,7 +98,7 @@ async def publish(
 async def like(
     work_id: UUID,
     service: Annotated[WorkService, Depends(get_work_service)],
-    user: Annotated[UUID, Depends(get_current_user)],
+    user: Annotated[UUID, Depends(require_permission("works.like"))],
 ) -> None:
     try:
         await service.like(work_id, user, True)
@@ -110,7 +110,7 @@ async def like(
 async def unlike(
     work_id: UUID,
     service: Annotated[WorkService, Depends(get_work_service)],
-    user: Annotated[UUID, Depends(get_current_user)],
+    user: Annotated[UUID, Depends(require_permission("works.like"))],
 ) -> None:
     try:
         await service.like(work_id, user, False)

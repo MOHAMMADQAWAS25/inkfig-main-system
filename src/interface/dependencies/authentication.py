@@ -1,4 +1,5 @@
-from typing import Annotated
+from dataclasses import dataclass
+from typing import Annotated, Callable, Awaitable
 from uuid import UUID
 
 import jwt
@@ -7,11 +8,18 @@ from fastapi import Depends, Header, HTTPException, Request
 from src.infrastructure.config.settings import Settings, get_settings
 
 
-async def get_optional_user(
+@dataclass(frozen=True)
+class AuthenticatedPrincipal:
+    user_id: UUID
+    role: str
+    permissions: frozenset[str]
+
+
+async def get_optional_principal(
     settings: Annotated[Settings, Depends(get_settings)],
     request: Request,
     authorization: Annotated[str | None, Header()] = None,
-) -> UUID | None:
+) -> AuthenticatedPrincipal | None:
     token = request.cookies.get(settings.access_cookie_name)
     if token is None and authorization:
         try:
@@ -30,16 +38,36 @@ async def get_optional_user(
         )
         if claims.get("type") != "access":
             raise ValueError
-        return UUID(claims["sub"])
+        permissions = claims.get("permissions", [])
+        if not isinstance(permissions, list) or not all(isinstance(item, str) for item in permissions):
+            raise ValueError
+        return AuthenticatedPrincipal(UUID(claims["sub"]), str(claims.get("role", "viewer")), frozenset(permissions))
     except Exception as error:
         raise HTTPException(
             status_code=401, detail="Invalid or expired access token."
         ) from error
 
 
-async def get_current_user(
-    user_id: Annotated[UUID | None, Depends(get_optional_user)],
-) -> UUID:
-    if user_id is None:
+async def get_optional_user(
+    settings: Annotated[Settings, Depends(get_settings)],
+    request: Request,
+    authorization: Annotated[str | None, Header()] = None,
+) -> UUID | None:
+    principal = await get_optional_principal(settings, request, authorization)
+    return None if principal is None else principal.user_id
+
+
+def require_permission(permission: str) -> Callable[..., Awaitable[UUID]]:
+    async def dependency(principal: Annotated[AuthenticatedPrincipal | None, Depends(get_optional_principal)]) -> UUID:
+        if principal is None:
+            raise HTTPException(status_code=401, detail="Authentication is required.")
+        if permission not in principal.permissions and "system.manage" not in principal.permissions:
+            raise HTTPException(status_code=403, detail="You do not have permission to perform this action.")
+        return principal.user_id
+    return dependency
+
+
+async def get_current_user(principal: Annotated[AuthenticatedPrincipal | None, Depends(get_optional_principal)]) -> UUID:
+    if principal is None:
         raise HTTPException(status_code=401, detail="Authentication is required.")
-    return user_id
+    return principal.user_id
