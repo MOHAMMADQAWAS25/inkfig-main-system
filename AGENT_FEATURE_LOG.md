@@ -1054,3 +1054,60 @@ Fix `Invalid or expired access token.` when an authenticated user attempts to up
 ### Notes
 
 The signing value remains secret and was never printed. A future central AWS Secrets Manager value could replace the user Lambda as the shared source of truth if desired.
+
+## 2026-10-04 - Permit main deployment to read shared JWT configuration
+
+### Request
+
+Complete the JWT synchronization deployment after GitHub Actions was denied while reading the user API Lambda configuration.
+
+### Changes
+
+- Added `lambda:GetFunctionConfiguration` to the main GitHub deployment role for only `inkfig-user-system-api`.
+- Preserved every existing deployment-role statement unchanged.
+- Removed the temporary local policy document after application.
+
+### Repositories
+
+- `inkfig-main-system`: recorded the required external IAM deployment permission.
+
+### Files
+
+- `AGENT_FEATURE_LOG.md`: records the IAM correction and verification.
+
+### API
+
+No API changes.
+
+### Database
+
+No migration required.
+
+### Permissions and scope
+
+- AWS role `InkFigMainSamDeployPolicy` can read configuration only from `arn:aws:lambda:eu-west-1:710412005992:function:inkfig-user-system-api` in addition to its existing permissions.
+- No runtime application role or end-user permission changed.
+
+### Frontend
+
+No frontend changes.
+
+### Verification
+
+- `[passed] aws iam simulate-principal-policy — lambda:GetFunctionConfiguration evaluated as allowed for the exact user API Lambda ARN`
+- `[failed] initial GitHub Actions run 37220723930 — deployment role lacked the new read permission`
+
+### Deployment
+
+- Rerun the `inkfig-main-system` GitHub Actions deployment.
+- No migration or environment-variable change is required.
+
+### Git
+
+- Branch: `main`
+- Commit: `documentation-only deployment retry commit`
+- Push: `successful`
+
+### Notes
+
+The IAM permission is infrastructure state outside the SAM application stack and was applied directly to the existing GitHub deployment role.
