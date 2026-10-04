@@ -1310,3 +1310,67 @@ No migration required. Queries use the existing `works.owner_user_id` and `work_
 ### Notes
 
 Profile collections currently return the first 50 items; API cursors are available for future load-more UI.
+
+## 2026-10-05 - Authenticate requests from secure access cookies
+
+### Request
+
+Accept the user backend's HTTP-only access cookie so protected main-system APIs no longer require frontend-managed bearer tokens.
+
+### Changes
+
+- Reads the signed access token from the configured cookie and validates its signature, issuer, type, expiry, and user ID.
+- Retains temporary Authorization Bearer compatibility for safe staged deployment and existing sessions.
+- Kept all work ownership, likes, profile scope, and public-feed behavior unchanged.
+
+### Repositories
+
+- `inkfig-main-system`: added access-cookie authentication.
+- `inkfig-user-system`: issues the shared access cookie.
+- `inkfig-user-FE`: sends credentialed requests.
+
+### Files
+
+- `src/interface/dependencies/authentication.py`: resolves cookie authentication with bearer fallback.
+- `src/infrastructure/config/settings.py`, `.env.example`, `template.yaml`: configure the access-cookie name.
+- `tests/test_cookie_authentication.py`: proves a valid signed cookie identifies its user.
+
+### API
+
+- All existing protected `/api/v1/works/*` endpoints accept `inkfig_access` as an HTTP-only cookie.
+- Invalid or expired cookies return 401 and missing credentials retain existing authentication behavior.
+
+### Database
+
+No migration required.
+
+### Permissions and scope
+
+- Existing backend authorization and authenticated-user scope remain authoritative.
+- Cookie contents are signature- and expiry-validated before the user ID is trusted.
+
+### Frontend
+
+- No UI changes in this repository.
+
+### Verification
+
+- `[passed] pytest — 14 tests passed`
+- `[passed] mypy src tests — no issues in 44 source files`
+- `[passed] ruff check src tests`
+- `[passed] git diff --check`
+
+### Deployment
+
+- Deploy `inkfig-main-system` before the cookie-only user API response and frontend.
+- No migration, new secret, or external configuration is required.
+
+### Git
+
+- Branch: `main`
+- Commit: `911498d`
+- Push: `successful`
+
+### Notes
+
+Bearer fallback prevents disruption to existing sessions during the staged rollout and can be removed in a later hardening ticket.
