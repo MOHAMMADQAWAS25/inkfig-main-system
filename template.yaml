@@ -56,6 +56,7 @@ Globals:
         DATABASE_URL: !Ref DatabaseUrl
         JWT_SECRET: !Ref JwtSecret
         JWT_ISSUER: inkfig-user-system
+        ACCESS_COOKIE_NAME: inkfig_access
         WORKS_BUCKET: works
 
 Resources:

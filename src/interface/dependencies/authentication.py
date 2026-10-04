@@ -2,21 +2,29 @@ from typing import Annotated
 from uuid import UUID
 
 import jwt
-from fastapi import Depends, Header, HTTPException
+from fastapi import Depends, Header, HTTPException, Request
 
 from src.infrastructure.config.settings import Settings, get_settings
 
 
 async def get_optional_user(
     settings: Annotated[Settings, Depends(get_settings)],
+    request: Request,
     authorization: Annotated[str | None, Header()] = None,
 ) -> UUID | None:
-    if not authorization:
+    token = request.cookies.get(settings.access_cookie_name)
+    if token is None and authorization:
+        try:
+            scheme, token = authorization.split(" ", 1)
+            if scheme.lower() != "bearer":
+                raise ValueError
+        except ValueError as error:
+            raise HTTPException(
+                status_code=401, detail="Invalid access token."
+            ) from error
+    if not token:
         return None
     try:
-        scheme, token = authorization.split(" ", 1)
-        if scheme.lower() != "bearer":
-            raise ValueError
         claims = jwt.decode(
             token, settings.jwt_secret, algorithms=["HS256"], issuer=settings.jwt_issuer
         )

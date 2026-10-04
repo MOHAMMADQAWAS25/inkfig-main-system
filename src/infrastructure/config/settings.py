@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     database_url: str = ""
     jwt_secret: str = ""
     jwt_issuer: str = "inkfig-user-system"
+    access_cookie_name: str = "inkfig_access"
     works_bucket: str = "works"
 
     model_config = SettingsConfigDict(
