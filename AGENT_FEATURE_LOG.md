@@ -1374,3 +1374,68 @@ No migration required.
 ### Notes
 
 Bearer fallback prevents disruption to existing sessions during the staged rollout and can be removed in a later hardening ticket.
+## 2026-10-05 - Enforce work permissions
+
+### Request
+
+Protect every interactive work endpoint with the new role-permission model.
+
+### Changes
+
+- Parses signed role and permission claims into an authenticated principal.
+- Requires explicit permissions for uploads, publishing, likes, and private profile feeds.
+- Leaves the public artwork feed and work types public.
+
+### Repositories
+
+- `inkfig-main-system`: enforces work permissions.
+- `inkfig-user-system`: issues the signed claims.
+- `inkfig-user-FE`: hides and guards restricted actions.
+
+### Files
+
+- `src/interface/dependencies/authentication.py`: adds principal parsing and permission dependencies.
+- `src/interface/api/routes/works.py`: declares permission requirements.
+
+### API
+
+- `POST /api/v1/works/uploads` and `POST /api/v1/works/{work_id}/publish`: require works.upload.
+- `PUT|DELETE /api/v1/works/{work_id}/like`: require works.like.
+- `GET /api/v1/works/me` and `GET /api/v1/works/likes`: require profile.read_own.
+- Missing authentication returns 401; missing permission returns 403.
+
+### Database
+
+No migration required.
+
+### Permissions and scope
+
+- Viewer has no protected work permissions.
+- User, supervisor, admin, and system-administrator retain current work abilities.
+- Authorization is validated by this backend from signed claims.
+
+### Frontend
+
+No frontend changes in this repository.
+
+### Verification
+
+- `[passed] py -3.12 -m pytest -q - 14 tests passed`
+- `[passed] py -3.12 -m mypy src tests - 44 files`
+- `[passed] py -3.12 -m compileall -q src tests`
+- `[passed] git diff --check`
+
+### Deployment
+
+- Deploy after user-system migration 007 and backend deployment.
+- No environment-variable changes are required.
+
+### Git
+
+- Branch: `main`
+- Commit: `a0ac6c9`
+- Push: `successful`
+
+### Notes
+
+Public homepage reads remain intentionally unauthenticated.
