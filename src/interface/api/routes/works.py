@@ -73,6 +73,17 @@ async def saved_works(
 ) -> WorkFeedResponse:
     return await service.profile_feed(user, limit, before, saved=True)
 
+
+@router.get("/users/{user_id}", response_model=WorkFeedResponse)
+async def user_works(
+    user_id: UUID,
+    service: Annotated[WorkService, Depends(get_work_service)],
+    viewer: Annotated[UUID | None, Depends(get_optional_user)],
+    limit: int = Query(50, ge=1, le=50),
+    before: datetime | None = None,
+) -> WorkFeedResponse:
+    return await service.public_profile_feed(user_id, viewer, limit, before)
+
 @router.post("/uploads", response_model=WorkUploadResponse, status_code=201)
 async def prepare_upload(
     request: CreateWorkUploadRequest,

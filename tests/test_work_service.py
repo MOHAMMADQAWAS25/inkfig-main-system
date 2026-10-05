@@ -20,6 +20,7 @@ class FakeWorkRepository:
         self.path: str | None = None
         self.published = False
         self.listed_type_code: str | None = None
+        self.listed_viewer_id: UUID | None = None
         self.listed_owner_id: UUID | None = None
         self.listed_liked_by_id: UUID | None = None
         self.listed_saved_by_id: UUID | None = None
@@ -59,7 +60,8 @@ class FakeWorkRepository:
         liked_by_id: UUID | None = None,
         saved_by_id: UUID | None = None,
     ) -> list[WorkResponse]:
-        del viewer_id, limit, before
+        del limit, before
+        self.listed_viewer_id = viewer_id
         self.listed_type_code = type_code
         self.listed_owner_id = owner_id
         self.listed_liked_by_id = liked_by_id
@@ -183,6 +185,22 @@ async def test_profile_feed_scopes_posts_to_authenticated_owner() -> None:
     assert result.items == []
     assert repository.listed_owner_id == user_id
     assert repository.listed_liked_by_id is None
+
+
+@pytest.mark.asyncio
+async def test_public_profile_feed_uses_profile_owner_and_current_viewer() -> None:
+    repository = FakeWorkRepository()
+    service = WorkService(repository, FakeWorkStorage(), "works")
+    profile_user_id = uuid4()
+    viewer_user_id = uuid4()
+
+    result = await service.public_profile_feed(
+        profile_user_id, viewer_user_id, 50, None
+    )
+
+    assert result.items == []
+    assert repository.listed_owner_id == profile_user_id
+    assert repository.listed_viewer_id == viewer_user_id
 
 
 @pytest.mark.asyncio
