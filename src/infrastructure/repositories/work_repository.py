@@ -177,9 +177,11 @@ class SqlAlchemyWorkRepository:
                 ) as saved
             from works w
             join work_types t on t.type_id = w.type_id
+            join user_accounts owner_account on owner_account.user_id = w.owner_user_id and owner_account.account_status = 'active'
             {' '.join(profile_joins)}
             left join user_profiles p on p.user_id = w.owner_user_id
             left join work_likes l on l.work_id = w.work_id
+              and exists (select 1 from user_accounts liker_account where liker_account.user_id = l.user_id and liker_account.account_status = 'active')
             where {' and '.join(filters)}
             group by w.work_id, p.full_name, t.type_id
             order by w.created_at desc, w.work_id desc

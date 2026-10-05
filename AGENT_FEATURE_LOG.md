@@ -1656,3 +1656,12 @@ No frontend changes in this repository. The coordinated profile UI is in `inkfig
 ### Notes
 
 None
+
+## 2026-10-06 - Hide inactive-account artwork and activity
+
+Updated published-work queries to require an active owner and to count likes only from active accounts. This keeps deactivated or administrator-suspended profiles, works, and like activity out of public and profile feeds while retaining data for safe reactivation.
+
+- No API or migration in this repository.
+- Verification: `git diff --check` passed.
+- Deployment: deploy after the user-system account-status migration.
+- Branch: `feature/account-status-lifecycle`; push to `main` after synchronization.
