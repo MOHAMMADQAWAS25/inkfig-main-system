@@ -1439,3 +1439,82 @@ No frontend changes in this repository.
 ### Notes
 
 Public homepage reads remain intentionally unauthenticated.
+
+## 2026-10-05 - Persist authenticated artwork saves
+
+### Request
+
+Allow registered users to save published artwork and expose their saved collection on their profile.
+
+### Changes
+
+- Added persistent per-user artwork saves with idempotent save and unsave operations.
+- Added viewer-specific saved state to every published-work response.
+- Added an authenticated saved-artwork feed scoped exclusively from the verified current user.
+- Protected save mutations with the new works.save permission and saved-feed reads with profile.read_own.
+- Added service coverage for authenticated saved-feed scope and save delegation.
+
+### Repositories
+
+- inkfig-main-system: save persistence, API endpoints, saved feed, migration, authorization, and tests.
+- inkfig-user-system: grants works.save to registered interactive roles in a paired migration.
+- inkfig-user-FE: adds the bookmark interaction and Saved profile tab.
+
+### Files
+
+- migrations/20261005_004_create_work_saves.sql: creates the secured work_saves relation and user/date index.
+- src/infrastructure/db/postgres/models/work.py: maps saved works.
+- src/entities/dto/works.py: exposes saved_by_me.
+- src/entities/repositories/works.py: extends save and saved-feed contracts.
+- src/infrastructure/repositories/work_repository.py: persists saves and queries viewer/profile state.
+- src/app/services/work_service.py: adds saved profile scope and save workflow.
+- src/interface/api/routes/works.py: adds saved-feed and save/unsave routes with backend permissions.
+- tests/test_work_service.py: covers save scope and service delegation.
+- AGENT_FEATURE_LOG.md: records this ticket.
+
+### API
+
+- GET /api/v1/works/saves returns the authenticated user's saved published works.
+- PUT /api/v1/works/{work_id}/save saves a published work.
+- DELETE /api/v1/works/{work_id}/save removes it from saved works.
+- Published work responses now include saved_by_me.
+- Save mutations return 401 without authentication, 403 without works.save, and 404 for unavailable works.
+
+### Database
+
+- Migration: migrations/20261005_004_create_work_saves.sql.
+- Creates work_saves with a cascading work foreign key, unique work/user primary key, created timestamp, user/date index, RLS, and service-role-only access.
+
+### Permissions and scope
+
+- Save mutations require a signed works.save claim.
+- Saved-feed reads require profile.read_own.
+- User identity always comes from the verified backend principal; no client-supplied user ID is accepted.
+- Only published works can be saved.
+
+### Frontend
+
+No frontend files changed in this repository. Paired frontend work adds the bookmark and Saved tab.
+
+### Verification
+
+- [passed] git diff --check
+- [passed] focused static review of migration, route permissions, service scope, repository parameters, and response mapping.
+- [not run] pytest, mypy, Ruff, and compileall - no usable Python runtime or project runner is installed in this session.
+
+### Deployment
+
+- First apply inkfig-user-system migration 20261005_008_add_work_save_permission.sql and deploy the user system.
+- Then apply migrations/20261005_004_create_work_saves.sql and deploy inkfig-main-system.
+- Deploy inkfig-user-FE last.
+- No new environment variables or secrets are required.
+
+### Git
+
+- Branch: main
+- Commit: this ticket's focused commit.
+- Push: pushed directly to origin/main after synchronization.
+
+### Notes
+
+Existing sessions must refresh or sign in again after the permission migration so their signed access claim includes works.save.

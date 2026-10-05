@@ -68,18 +68,24 @@ class WorkService:
         limit: int,
         before: datetime | None,
         liked: bool = False,
+        saved: bool = False,
     ) -> WorkFeedResponse:
         items = await self._repository.list_published(
             user_id,
             limit + 1,
             before,
             None,
-            owner_id=None if liked else user_id,
+            owner_id=None if liked or saved else user_id,
             liked_by_id=user_id if liked else None,
+            saved_by_id=user_id if saved else None,
         )
         next_cursor = items[limit - 1].created_at if len(items) > limit else None
         return WorkFeedResponse(items=items[:limit], next_cursor=next_cursor)
 
     async def like(self, work_id: UUID, user_id: UUID, liked: bool) -> None:
         if not await self._repository.set_like(work_id, user_id, liked):
+            raise WorkNotFoundError
+
+    async def save(self, work_id: UUID, user_id: UUID, saved: bool) -> None:
+        if not await self._repository.set_save(work_id, user_id, saved):
             raise WorkNotFoundError

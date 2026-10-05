@@ -13,6 +13,7 @@ from src.entities.dto.works import (
 from src.infrastructure.db.postgres.models.work import (
     WorkLikeModel,
     WorkLinkModel,
+    WorkSaveModel,
     WorkModel,
     WorkTypeModel,
 )
@@ -112,6 +113,7 @@ class SqlAlchemyWorkRepository:
         type_code: str | None,
         owner_id: UUID | None = None,
         liked_by_id: UUID | None = None,
+        saved_by_id: UUID | None = None,
     ) -> list[WorkResponse]:
         stmt = text(
             """
@@ -136,7 +138,12 @@ class SqlAlchemyWorkRepository:
                 coalesce(
                     bool_or(l.user_id = cast(:viewer as uuid)),
                     false
-                ) as liked
+                ) as liked,
+                exists (
+                    select 1 from work_saves viewer_save
+                    where viewer_save.work_id = w.work_id
+                      and viewer_save.user_id = cast(:viewer as uuid)
+                ) as saved
             from works w
             join work_types t on t.type_id = w.type_id
             left join user_profiles p on p.user_id = w.owner_user_id
@@ -162,6 +169,14 @@ class SqlAlchemyWorkRepository:
                         and profile_like.user_id = cast(:liked_by_id as uuid)
                   )
               )
+              and (
+                  cast(:saved_by_id as uuid) is null
+                  or exists (
+                      select 1 from work_saves profile_save
+                      where profile_save.work_id = w.work_id
+                        and profile_save.user_id = cast(:saved_by_id as uuid)
+                  )
+              )
             group by w.work_id, p.full_name, t.type_id
             order by w.created_at desc
             limit :limit
@@ -177,6 +192,7 @@ class SqlAlchemyWorkRepository:
                     "type_code": type_code,
                     "owner_id": owner_id,
                     "liked_by_id": liked_by_id,
+                    "saved_by_id": saved_by_id,
                 },
             )
         ).mappings()
@@ -195,6 +211,7 @@ class SqlAlchemyWorkRepository:
                 mime_type=r.mime_type,
                 like_count=r.like_count,
                 liked_by_me=r.liked,
+                saved_by_me=r.saved,
                 created_at=r.created_at,
             )
             for r in rows
@@ -218,6 +235,29 @@ class SqlAlchemyWorkRepository:
             await self._session.execute(
                 delete(WorkLikeModel).where(
                     WorkLikeModel.work_id == work_id, WorkLikeModel.user_id == user_id
+                )
+            )
+            await self._session.commit()
+        return True
+
+    async def set_save(self, work_id: UUID, user_id: UUID, saved: bool) -> bool:
+        exists = await self._session.scalar(
+            select(WorkModel.work_id).where(
+                WorkModel.work_id == work_id, WorkModel.status == "published"
+            )
+        )
+        if exists is None:
+            return False
+        if saved:
+            self._session.add(WorkSaveModel(work_id=work_id, user_id=user_id))
+            try:
+                await self._session.commit()
+            except IntegrityError:
+                await self._session.rollback()
+        else:
+            await self._session.execute(
+                delete(WorkSaveModel).where(
+                    WorkSaveModel.work_id == work_id, WorkSaveModel.user_id == user_id
                 )
             )
             await self._session.commit()

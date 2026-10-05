@@ -59,6 +59,7 @@ class WorkResponse(BaseModel):
     mime_type: str
     like_count: int
     liked_by_me: bool = False
+    saved_by_me: bool = False
     created_at: datetime
 
 

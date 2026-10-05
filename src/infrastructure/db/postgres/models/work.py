@@ -59,6 +59,18 @@ class WorkLikeModel(Base):
     )
 
 
+class WorkSaveModel(Base):
+    __tablename__ = "work_saves"
+    __table_args__ = (UniqueConstraint("work_id", "user_id"),)
+    work_id: Mapped[UUID] = mapped_column(
+        ForeignKey("works.work_id", ondelete="CASCADE"), primary_key=True
+    )
+    user_id: Mapped[UUID] = mapped_column(PostgresUUID(as_uuid=True), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 class WorkLinkModel(Base):
     __tablename__ = "work_links"
     __table_args__ = (UniqueConstraint("work_id", "url"),)

@@ -64,6 +64,15 @@ async def liked_works(
     return await service.profile_feed(user, limit, before, liked=True)
 
 
+@router.get("/saves", response_model=WorkFeedResponse)
+async def saved_works(
+    service: Annotated[WorkService, Depends(get_work_service)],
+    user: Annotated[UUID, Depends(require_permission("profile.read_own"))],
+    limit: int = Query(50, ge=1, le=50),
+    before: datetime | None = None,
+) -> WorkFeedResponse:
+    return await service.profile_feed(user, limit, before, saved=True)
+
 @router.post("/uploads", response_model=WorkUploadResponse, status_code=201)
 async def prepare_upload(
     request: CreateWorkUploadRequest,
@@ -114,5 +123,29 @@ async def unlike(
 ) -> None:
     try:
         await service.like(work_id, user, False)
+    except WorkNotFoundError as e:
+        raise HTTPException(404, "Work not found.") from e
+
+
+@router.put("/{work_id}/save", status_code=204)
+async def save(
+    work_id: UUID,
+    service: Annotated[WorkService, Depends(get_work_service)],
+    user: Annotated[UUID, Depends(require_permission("works.save"))],
+) -> None:
+    try:
+        await service.save(work_id, user, True)
+    except WorkNotFoundError as e:
+        raise HTTPException(404, "Work not found.") from e
+
+
+@router.delete("/{work_id}/save", status_code=204)
+async def unsave(
+    work_id: UUID,
+    service: Annotated[WorkService, Depends(get_work_service)],
+    user: Annotated[UUID, Depends(require_permission("works.save"))],
+) -> None:
+    try:
+        await service.save(work_id, user, False)
     except WorkNotFoundError as e:
         raise HTTPException(404, "Work not found.") from e
