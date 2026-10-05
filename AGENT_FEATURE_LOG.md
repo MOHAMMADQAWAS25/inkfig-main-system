@@ -1592,3 +1592,67 @@ No frontend changes.
 
 - Future database tickets must compare query predicates, join direction, ordering, and pagination with existing indexes and avoid redundant or low-selectivity indexes.
 - Query plans should be reassessed using production-scale statistics as table cardinality grows; small tables may correctly use sequential scans despite having suitable indexes.
+## 2026-10-06 - Expose public profile artwork feeds
+
+### Request
+
+Allow a profile page to display all published artworks owned by the selected InkFig account.
+
+### Changes
+
+- Added a public profile artwork use case that scopes the feed to the requested owner while preserving viewer-specific like and save state.
+- Reused the optimized published-owner feed query and indexes.
+- Left upload, ownership mutation, likes, saves, and private profile collections unchanged.
+
+### Repositories
+
+- `inkfig-main-system`: exposes published work for a selected owner.
+- `inkfig-user-system`: owns profile data and follow relationships.
+- `inkfig-user-FE`: consumes the profile artwork endpoint.
+
+### Files
+
+- `src/app/services/work_service.py`: adds the public profile feed workflow.
+- `src/interface/api/routes/works.py`: adds the owner-specific published-work route.
+- `tests/test_work_service.py`: verifies separation of requested owner and current viewer scope.
+
+### API
+
+- `GET /api/v1/works/users/{user_id}`: returns published artworks owned by `user_id`; accepts the existing `limit` and `before` pagination fields, includes viewer-specific like/save state when authenticated, and remains publicly readable.
+
+### Database
+
+- No migration required.
+- The endpoint uses the existing partial `works_published_owner_feed_idx` plus primary/relationship indexes.
+
+### Permissions and scope
+
+- No permission is required to view published artwork.
+- Optional authentication only personalizes like and save state.
+- The backend fixes owner scope from the path UUID and never accepts owner scope from response or client state.
+
+### Frontend
+
+No frontend changes in this repository. The coordinated profile UI is in `inkfig-user-FE`.
+
+### Verification
+
+- `[passed] uv run --with-requirements requirements.txt pytest -q — 20 passed`
+- `[passed] uv run --with-requirements requirements.txt mypy src tests — no issues in 45 files`
+- `[passed] ruff check on all changed main-backend files`
+- `[passed] python -m compileall -q src tests`
+
+### Deployment
+
+- Deploy `inkfig-main-system`.
+- No migrations or configuration changes are required.
+
+### Git
+
+- Branch: `main`
+- Commit: `f153b54`
+- Push: `successful`
+
+### Notes
+
+None
