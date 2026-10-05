@@ -13,8 +13,8 @@ from src.entities.dto.works import (
 from src.infrastructure.db.postgres.models.work import (
     WorkLikeModel,
     WorkLinkModel,
-    WorkSaveModel,
     WorkModel,
+    WorkSaveModel,
     WorkTypeModel,
 )
 from src.infrastructure.integrations.supabase_storage import SupabaseWorkStorage
@@ -115,8 +115,39 @@ class SqlAlchemyWorkRepository:
         liked_by_id: UUID | None = None,
         saved_by_id: UUID | None = None,
     ) -> list[WorkResponse]:
+        profile_joins: list[str] = []
+        filters = ["w.status = 'published'"]
+        parameters: dict[str, object] = {"viewer": viewer_id, "limit": limit}
+
+        if type_code is not None:
+            filters.append("t.code = :type_code")
+            parameters["type_code"] = type_code
+        if before is not None:
+            filters.append("w.created_at < :before")
+            parameters["before"] = before
+        if owner_id is not None:
+            filters.append("w.owner_user_id = :owner_id")
+            parameters["owner_id"] = owner_id
+        if liked_by_id is not None:
+            profile_joins.append(
+                "join work_likes profile_like "
+                "on profile_like.work_id = w.work_id "
+                "and profile_like.user_id = :liked_by_id"
+            )
+            parameters["liked_by_id"] = liked_by_id
+        if saved_by_id is not None:
+            profile_joins.append(
+                "join work_saves profile_save "
+                "on profile_save.work_id = w.work_id "
+                "and profile_save.user_id = :saved_by_id"
+            )
+            parameters["saved_by_id"] = saved_by_id
+
+        # Only trusted, fixed fragments are interpolated. Optional predicates are
+        # omitted instead of expressed as ``parameter is null OR ...`` so Postgres
+        # can choose the matching partial/composite index for each feed variant.
         stmt = text(
-            """
+            f"""
             select
                 w.work_id,
                 w.owner_user_id,
@@ -146,55 +177,17 @@ class SqlAlchemyWorkRepository:
                 ) as saved
             from works w
             join work_types t on t.type_id = w.type_id
+            {' '.join(profile_joins)}
             left join user_profiles p on p.user_id = w.owner_user_id
             left join work_likes l on l.work_id = w.work_id
-            where w.status = 'published'
-              and (
-                  cast(:type_code as varchar) is null
-                  or t.code = cast(:type_code as varchar)
-              )
-              and (
-                  cast(:before as timestamptz) is null
-                  or w.created_at < cast(:before as timestamptz)
-              )
-              and (
-                  cast(:owner_id as uuid) is null
-                  or w.owner_user_id = cast(:owner_id as uuid)
-              )
-              and (
-                  cast(:liked_by_id as uuid) is null
-                  or exists (
-                      select 1 from work_likes profile_like
-                      where profile_like.work_id = w.work_id
-                        and profile_like.user_id = cast(:liked_by_id as uuid)
-                  )
-              )
-              and (
-                  cast(:saved_by_id as uuid) is null
-                  or exists (
-                      select 1 from work_saves profile_save
-                      where profile_save.work_id = w.work_id
-                        and profile_save.user_id = cast(:saved_by_id as uuid)
-                  )
-              )
+            where {' and '.join(filters)}
             group by w.work_id, p.full_name, t.type_id
-            order by w.created_at desc
+            order by w.created_at desc, w.work_id desc
             limit :limit
             """
         )
         rows = (
-            await self._session.execute(
-                stmt,
-                {
-                    "viewer": viewer_id,
-                    "before": before,
-                    "limit": limit,
-                    "type_code": type_code,
-                    "owner_id": owner_id,
-                    "liked_by_id": liked_by_id,
-                    "saved_by_id": saved_by_id,
-                },
-            )
+            await self._session.execute(stmt, parameters)
         ).mappings()
         return [
             WorkResponse(
