@@ -1518,3 +1518,77 @@ No frontend files changed in this repository. Paired frontend work adds the book
 ### Notes
 
 Existing sessions must refresh or sign in again after the permission migration so their signed access claim includes works.save.
+## 2026-10-06 - Optimize artwork database indexes
+
+### Request
+
+Review and optimize the database and indexing for current InkFig workloads, and make query/index review a standard consideration for future database work.
+
+### Changes
+
+- Replaced the mismatched published-work index on `published_at` with partial composite indexes matching the actual `created_at` feed order.
+- Added workload-specific published-feed indexes for the global, work-type, and owner views.
+- Added user-first composite indexes for liked and saved profile collections.
+- Removed the redundant work-link ordering index because the existing unique `(work_id, position)` constraint already provides the same B-tree prefix.
+- Changed optional feed filters from nullable `OR` expressions to fixed conditional predicates and joins so PostgreSQL can select the relevant partial/composite index.
+- Added a stable `work_id` ordering tie-breaker while preserving the existing timestamp cursor API.
+- Left authorization, storage, API contracts, and frontend behavior unchanged.
+
+### Repositories
+
+- `inkfig-main-system`: optimized artwork query construction and database indexes.
+
+### Files
+
+- `src/infrastructure/repositories/work_repository.py`: made feed SQL index-friendly and deterministically ordered.
+- `migrations/20261006_005_optimize_query_indexes.sql`: replaced redundant/mismatched indexes and added workload-aligned indexes.
+- `tests/test_query_indexes.py`: added regression coverage for index definitions and query shape.
+
+### API
+
+No API changes.
+
+### Database
+
+- Migration: `20261006_005_optimize_query_indexes.sql`
+- Replaces the old public-feed and owner indexes with partial published-work indexes on global `(created_at DESC, work_id DESC)`, type `(type_id, created_at DESC, work_id DESC)`, and owner `(owner_user_id, created_at DESC, work_id DESC)` access paths.
+- Adds `(user_id, created_at DESC, work_id DESC)` indexes to likes and saves, and removes the redundant work-link ordering index.
+- No data backfill, constraint, default, or foreign-key changes are required. Rollback can drop the new indexes and recreate the prior indexes, with no data loss.
+
+### Permissions and scope
+
+- Public published-feed reads remain available without a permission.
+- `profile.read_own` remains required for owned, liked, and saved profile feeds.
+- `works.like` and `works.save` remain required for their respective mutations.
+- Role and user scope rules are unchanged and continue to be validated by the backend.
+
+### Frontend
+
+No frontend changes.
+
+### Verification
+
+- `[passed] uv run --with-requirements requirements.txt pytest -q — 19 passed`
+- `[passed] uv run --with-requirements requirements.txt mypy src tests — no issues in 45 files`
+- `[passed] uv run --with-requirements requirements.txt ruff check src/infrastructure/repositories/work_repository.py tests/test_query_indexes.py`
+- `[passed] uv run --with-requirements requirements.txt python -m compileall -q src tests`
+- `[passed] python -m migrations.run — migration applied and works tables/storage verified`
+- `[passed] live pg_indexes query — all artwork indexes and partial predicates verified on Supabase`
+- `[failed] uv run --with-requirements requirements.txt ruff check src tests — unrelated pre-existing findings in src/interface/dependencies/authentication.py`
+
+### Deployment
+
+- Deploy `inkfig-main-system`.
+- Run `20261006_005_optimize_query_indexes.sql` before deploying the application; it has already been applied to the configured Supabase database.
+- No environment-variable or configuration changes.
+
+### Git
+
+- Branch: `main`
+- Commit: `bfdae62`
+- Push: `successful`
+
+### Notes
+
+- Future database tickets must compare query predicates, join direction, ordering, and pagination with existing indexes and avoid redundant or low-selectivity indexes.
+- Query plans should be reassessed using production-scale statistics as table cardinality grows; small tables may correctly use sequential scans despite having suitable indexes.
