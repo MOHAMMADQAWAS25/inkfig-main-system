@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import math
 from uuid import UUID
 
 from sqlalchemy import delete, select, text
@@ -257,3 +258,115 @@ class SqlAlchemyWorkRepository:
             )
             await self._session.commit()
         return True
+
+    async def save_embedding(
+        self, work_id: UUID, embedding: list[float], model_name: str
+    ) -> None:
+        vector = self._vector_literal(embedding)
+        await self._session.execute(
+            text(
+                """
+                insert into work_embeddings(work_id, embedding, model_name)
+                values (:work_id, cast(:embedding as extensions.vector), :model_name)
+                on conflict (work_id) do update set
+                    embedding = excluded.embedding,
+                    model_name = excluded.model_name,
+                    embedded_at = now()
+                """
+            ),
+            {"work_id": work_id, "embedding": vector, "model_name": model_name},
+        )
+        await self._session.commit()
+
+    async def search_published(
+        self,
+        viewer_id: UUID | None,
+        embedding: list[float],
+        limit: int,
+        type_code: str | None,
+    ) -> list[WorkResponse]:
+        filters = ["w.status = 'published'"]
+        parameters: dict[str, object] = {
+            "viewer": viewer_id,
+            "embedding": self._vector_literal(embedding),
+            "limit": limit,
+        }
+        if type_code is not None:
+            filters.append("t.code = :type_code")
+            parameters["type_code"] = type_code
+        rows = (
+            await self._session.execute(
+                text(
+                    f"""
+                    select w.work_id, w.owner_user_id,
+                           coalesce(p.full_name, 'InkFig artist') as artist_name,
+                           w.type_id, t.name_en, t.name_ar, w.title, w.description,
+                           coalesce((select jsonb_agg(jsonb_build_object('url', wl.url, 'label', wl.label) order by wl.position)
+                                     from work_links wl where wl.work_id = w.work_id), '[]'::jsonb) as links,
+                           w.storage_path, w.mime_type, w.created_at,
+                           count(l.user_id) as like_count,
+                           coalesce(bool_or(l.user_id = cast(:viewer as uuid)), false) as liked,
+                           exists(select 1 from work_saves s where s.work_id = w.work_id
+                                  and s.user_id = cast(:viewer as uuid)) as saved
+                    from work_embeddings e
+                    join works w on w.work_id = e.work_id
+                    join work_types t on t.type_id = w.type_id
+                    join user_accounts a on a.user_id = w.owner_user_id and a.account_status = 'active'
+                    left join user_profiles p on p.user_id = w.owner_user_id
+                    left join work_likes l on l.work_id = w.work_id
+                      and exists(select 1 from user_accounts la where la.user_id = l.user_id and la.account_status = 'active')
+                    where {' and '.join(filters)}
+                    group by w.work_id, p.full_name, t.type_id, e.embedding
+                    order by e.embedding <=> cast(:embedding as extensions.vector), w.created_at desc
+                    limit :limit
+                    """
+                ),
+                parameters,
+            )
+        ).mappings()
+        return [
+            WorkResponse(
+                work_id=r.work_id,
+                owner_user_id=r.owner_user_id,
+                artist_name=r.artist_name,
+                type_id=r.type_id,
+                type_name_en=r.name_en,
+                type_name_ar=r.name_ar,
+                title=r.title,
+                description=r.description,
+                links=r.links,
+                image_url=self._storage.public_url(r.storage_path),
+                mime_type=r.mime_type,
+                like_count=r.like_count,
+                liked_by_me=r.liked,
+                saved_by_me=r.saved,
+                created_at=r.created_at,
+            )
+            for r in rows
+        ]
+
+    async def list_unembedded_paths(self, limit: int) -> list[tuple[UUID, str]]:
+        rows = (
+            await self._session.execute(
+                text(
+                    """
+                    select w.work_id, w.storage_path
+                    from works w
+                    join user_accounts a on a.user_id = w.owner_user_id
+                      and a.account_status = 'active'
+                    left join work_embeddings e on e.work_id = w.work_id
+                    where w.status = 'published' and e.work_id is null
+                    order by w.published_at asc nulls first, w.work_id
+                    limit :limit
+                    """
+                ),
+                {"limit": limit},
+            )
+        ).all()
+        return [(row.work_id, row.storage_path) for row in rows]
+
+    @staticmethod
+    def _vector_literal(embedding: list[float]) -> str:
+        if not embedding or any(not math.isfinite(value) for value in embedding):
+            raise ValueError("Embedding must contain finite values.")
+        return "[" + ",".join(format(value, ".10g") for value in embedding) + "]"

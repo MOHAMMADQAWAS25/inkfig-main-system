@@ -11,7 +11,11 @@ from src.entities.dto.works import (
     WorkResponse,
     WorkTypeResponse,
 )
-from src.entities.exceptions.works import UnsupportedWorkFileError, WorkNotFoundError
+from src.entities.exceptions.works import (
+    UnsupportedWorkFileError,
+    WorkNotFoundError,
+    WorkSearchUnavailableError,
+)
 
 
 class FakeWorkRepository:
@@ -25,6 +29,10 @@ class FakeWorkRepository:
         self.listed_liked_by_id: UUID | None = None
         self.listed_saved_by_id: UUID | None = None
         self.saved: bool | None = None
+        self.embedding: list[float] | None = None
+        self.search_embedding: list[float] | None = None
+        self.search_type_code: str | None = None
+        self.unembedded: list[tuple[UUID, str]] = []
 
     async def list_types(self) -> list[WorkTypeResponse]:
         return []
@@ -77,6 +85,27 @@ class FakeWorkRepository:
         self.saved = saved
         return True
 
+    async def save_embedding(
+        self, work_id: UUID, embedding: list[float], model_name: str
+    ) -> None:
+        del work_id, model_name
+        self.embedding = embedding
+
+    async def search_published(
+        self,
+        viewer_id: UUID | None,
+        embedding: list[float],
+        limit: int,
+        type_code: str | None,
+    ) -> list[WorkResponse]:
+        del viewer_id, limit
+        self.search_embedding = embedding
+        self.search_type_code = type_code
+        return []
+
+    async def list_unembedded_paths(self, limit: int) -> list[tuple[UUID, str]]:
+        return self.unembedded[:limit]
+
 
 class FakeWorkStorage:
     def __init__(self, exists: bool = True) -> None:
@@ -88,6 +117,29 @@ class FakeWorkStorage:
     async def object_exists(self, path: str) -> bool:
         del path
         return self.exists
+
+    def public_url(self, path: str) -> str:
+        return f"https://storage.test/{path}"
+
+
+class FakeEmbeddingProvider:
+    model_name = "voyage-test"
+
+    def __init__(self, fails: bool = False) -> None:
+        self.fails = fails
+        self.query: str | None = None
+
+    async def embed_query(self, query: str) -> list[float]:
+        self.query = query
+        if self.fails:
+            raise RuntimeError("provider unavailable")
+        return [0.25, 0.75]
+
+    async def embed_image(self, image_url: str) -> list[float]:
+        del image_url
+        if self.fails:
+            raise RuntimeError("provider unavailable")
+        return [0.1, 0.9]
 
 
 def upload_request(mime_type: str = "image/png") -> CreateWorkUploadRequest:
@@ -236,3 +288,52 @@ async def test_save_delegates_authenticated_user_scope() -> None:
     await service.save(uuid4(), uuid4(), True)
 
     assert repository.saved is True
+
+
+@pytest.mark.asyncio
+async def test_search_normalizes_query_and_uses_multimodal_embedding() -> None:
+    repository = FakeWorkRepository()
+    provider = FakeEmbeddingProvider()
+    service = WorkService(repository, FakeWorkStorage(), "works", provider)
+
+    result = await service.search("  moon   at night ", None, 20, "photography")
+
+    assert result.items == []
+    assert provider.query == "moon at night"
+    assert repository.search_embedding == [0.25, 0.75]
+    assert repository.search_type_code == "photography"
+
+
+@pytest.mark.asyncio
+async def test_search_backfills_existing_published_artworks() -> None:
+    repository = FakeWorkRepository()
+    work_id = uuid4()
+    repository.unembedded = [(work_id, f"owner/{work_id}.png")]
+    provider = FakeEmbeddingProvider()
+    service = WorkService(repository, FakeWorkStorage(), "works", provider)
+
+    await service.search("moon", None, 20)
+
+    assert repository.embedding == [0.1, 0.9]
+
+
+@pytest.mark.asyncio
+async def test_search_reports_unavailable_when_voyage_is_not_configured() -> None:
+    service = WorkService(FakeWorkRepository(), FakeWorkStorage(), "works")
+
+    with pytest.raises(WorkSearchUnavailableError):
+        await service.search("moon", None, 20)
+
+
+@pytest.mark.asyncio
+async def test_publish_succeeds_when_embedding_provider_is_temporarily_down() -> None:
+    repository = FakeWorkRepository()
+    repository.path = f"{uuid4()}/{uuid4()}.png"
+    service = WorkService(
+        repository, FakeWorkStorage(), "works", FakeEmbeddingProvider(fails=True)
+    )
+
+    await service.publish(uuid4(), uuid4())
+
+    assert repository.published is True
+    assert repository.embedding is None

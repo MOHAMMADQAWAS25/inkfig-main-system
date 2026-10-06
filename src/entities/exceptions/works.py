@@ -2,6 +2,10 @@ class WorkTypeNotFoundError(Exception):
     pass
 
 
+class WorkSearchUnavailableError(Exception):
+    pass
+
+
 class WorkNotFoundError(Exception):
     pass
 

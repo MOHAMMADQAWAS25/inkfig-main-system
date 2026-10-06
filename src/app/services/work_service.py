@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime
 from typing import ClassVar
 from uuid import UUID, uuid4
@@ -8,8 +9,16 @@ from src.entities.dto.works import (
     WorkTypeResponse,
     WorkUploadResponse,
 )
-from src.entities.exceptions.works import UnsupportedWorkFileError, WorkNotFoundError
-from src.entities.repositories.works import WorkRepository, WorkStorage
+from src.entities.exceptions.works import (
+    UnsupportedWorkFileError,
+    WorkNotFoundError,
+    WorkSearchUnavailableError,
+)
+from src.entities.repositories.works import (
+    WorkEmbeddingProvider,
+    WorkRepository,
+    WorkStorage,
+)
 
 
 class WorkService:
@@ -21,9 +30,14 @@ class WorkService:
     }
 
     def __init__(
-        self, repository: WorkRepository, storage: WorkStorage, bucket: str
+        self,
+        repository: WorkRepository,
+        storage: WorkStorage,
+        bucket: str,
+        embedding_provider: WorkEmbeddingProvider | None = None,
     ) -> None:
         self._repository, self._storage, self._bucket = repository, storage, bucket
+        self._embedding_provider = embedding_provider
 
     async def list_types(self) -> list[WorkTypeResponse]:
         return await self._repository.list_types()
@@ -48,6 +62,63 @@ class WorkService:
             raise WorkNotFoundError
         if not await self._repository.publish(work_id, user_id):
             raise WorkNotFoundError
+        if self._embedding_provider is not None:
+            try:
+                embedding = await self._embedding_provider.embed_image(
+                    self._storage.public_url(path)
+                )
+                await self._repository.save_embedding(
+                    work_id, embedding, self._embedding_provider.model_name
+                )
+            except Exception:
+                # Artwork publication must not depend on an external AI provider.
+                # Missing embeddings are safe to retry through the backfill workflow.
+                return
+
+    async def search(
+        self,
+        query: str,
+        viewer_id: UUID | None,
+        limit: int,
+        type_code: str | None = None,
+    ) -> WorkFeedResponse:
+        normalized = " ".join(query.split())
+        if self._embedding_provider is None:
+            raise WorkSearchUnavailableError
+        try:
+            await self._backfill_missing_embeddings()
+            embedding = await self._embedding_provider.embed_query(normalized)
+        except Exception as error:
+            raise WorkSearchUnavailableError from error
+        items = await self._repository.search_published(
+            viewer_id, embedding, limit, type_code
+        )
+        return WorkFeedResponse(items=items)
+
+    async def _backfill_missing_embeddings(self) -> None:
+        if self._embedding_provider is None:
+            return
+        provider = self._embedding_provider
+        pending = await self._repository.list_unembedded_paths(5)
+
+        async def embed(work_id: UUID, path: str) -> tuple[UUID, list[float]] | None:
+            try:
+                embedding = await provider.embed_image(
+                    self._storage.public_url(path)
+                )
+                return work_id, embedding
+            except Exception:
+                # A failed item remains eligible for a later bounded retry.
+                return None
+
+        embedded = await asyncio.gather(
+            *(embed(work_id, path) for work_id, path in pending)
+        )
+        for result in embedded:
+            if result is not None:
+                await self._repository.save_embedding(
+                    result[0], result[1], provider.model_name
+                )
 
     async def feed(
         self,

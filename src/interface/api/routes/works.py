@@ -15,6 +15,7 @@ from src.entities.exceptions.works import (
     StorageUploadError,
     UnsupportedWorkFileError,
     WorkNotFoundError,
+    WorkSearchUnavailableError,
     WorkTypeNotFoundError,
 )
 from src.interface.dependencies.authentication import (
@@ -42,6 +43,22 @@ async def feed(
     type_code: str | None = Query(default=None, min_length=1, max_length=64),
 ) -> WorkFeedResponse:
     return await service.feed(viewer, limit, before, type_code)
+
+
+@router.get("/search", response_model=WorkFeedResponse)
+async def search(
+    service: Annotated[WorkService, Depends(get_work_service)],
+    viewer: Annotated[UUID | None, Depends(get_optional_user)],
+    query: str = Query(min_length=2, max_length=500),
+    limit: int = Query(20, ge=1, le=50),
+    type_code: str | None = Query(default=None, min_length=1, max_length=64),
+) -> WorkFeedResponse:
+    try:
+        return await service.search(query, viewer, limit, type_code)
+    except WorkSearchUnavailableError as error:
+        raise HTTPException(
+            503, "Semantic artwork search is temporarily unavailable."
+        ) from error
 
 
 @router.get("/me", response_model=WorkFeedResponse)

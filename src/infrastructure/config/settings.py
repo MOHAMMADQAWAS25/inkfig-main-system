@@ -15,6 +15,10 @@ class Settings(BaseSettings):
     jwt_issuer: str = "inkfig-user-system"
     access_cookie_name: str = "inkfig_access"
     works_bucket: str = "works"
+    voyage_api_key: str = ""
+    voyage_secret_id: str = ""
+    voyage_model: str = "voyage-multimodal-3.5"
+    voyage_embedding_dimension: int = 1024
 
     model_config = SettingsConfigDict(
         env_file=".env",

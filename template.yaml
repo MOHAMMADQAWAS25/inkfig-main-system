@@ -58,6 +58,9 @@ Globals:
         JWT_ISSUER: inkfig-user-system
         ACCESS_COOKIE_NAME: inkfig_access
         WORKS_BUCKET: works
+        VOYAGE_SECRET_ID: inkfig/main/voyage
+        VOYAGE_MODEL: voyage-multimodal-3.5
+        VOYAGE_EMBEDDING_DIMENSION: "1024"
 
 Resources:
   HttpApi:
@@ -69,7 +72,6 @@ Resources:
         Project: !Ref ProjectName
         Service: main-system
         Environment: !Ref Environment
-
   ApiDomainName:
     Type: AWS::ApiGatewayV2::DomainName
     Properties:
@@ -102,6 +104,12 @@ Resources:
         Project: !Ref ProjectName
         Service: main-system
         Environment: !Ref Environment
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource: !Sub "arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:inkfig/main/voyage-*"
       Events:
         Root:
           Type: HttpApi

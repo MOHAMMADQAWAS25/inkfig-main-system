@@ -33,10 +33,10 @@ async def run() -> None:
                 )
             print(f"Applied {migration.name}")
         tables_ready = await connection.fetchval(
-            "select count(*) = 3 from information_schema.tables "
+            "select count(*) = 4 from information_schema.tables "
             "where table_schema = 'public' "
             "and table_name = any($1::text[])",
-            ["work_types", "works", "work_likes"],
+            ["work_types", "works", "work_likes", "work_embeddings"],
         )
         bucket_ready = await connection.fetchval(
             "select exists(select 1 from storage.buckets "
