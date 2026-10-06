@@ -1801,3 +1801,64 @@ No frontend changes.
 ### Notes
 
 The stored key, Secrets Manager secret, Lambda configuration, CloudFormation deployment, and database migration are correct. Reliable production search is externally blocked only by the Voyage account's reduced 3-RPM limit.
+## 2026-10-06 - Delete all existing artworks
+
+### Request
+
+Permanently remove all previously uploaded artwork records so future works enter the Voyage embedding process from publication.
+
+### Changes
+
+- Added a one-time migration that deletes every row from the parent `works` table.
+- Relied on existing cascading foreign keys to delete associated links, likes, saves, and embeddings atomically.
+- Intentionally left users, work types, permissions, and Supabase Storage objects unchanged.
+
+### Repositories
+
+- `inkfig-main-system`: added the destructive artwork-data reset migration and regression test.
+
+### Files
+
+- `migrations/20261006_007_delete_existing_works.sql`: deletes all existing artwork database records.
+- `tests/test_delete_existing_works_migration.py`: verifies the reset targets only the parent works table and does not directly manipulate Storage metadata.
+
+### API
+
+No API changes.
+
+### Database
+
+- Migration: `20261006_007_delete_existing_works.sql`
+- Deletes all rows from `public.works`; foreign-key cascades delete matching `work_links`, `work_likes`, `work_saves`, and `work_embeddings` rows. This data deletion has no automatic rollback or backfill. Users and canonical work types remain intact.
+
+### Permissions and scope
+
+- No application permissions or role access changed.
+- This deployment-time migration affects artworks belonging to every user and bypasses application endpoints by design.
+- Normal backend authorization remains unchanged after the reset.
+
+### Frontend
+
+No frontend changes. Existing feeds and profiles display their normal empty states after the migration.
+
+### Verification
+
+- `[passed] py -3.12 -m pytest` (26 tests)
+- `[passed] py -3.12 -m mypy src tests` (48 source files)
+- `[passed] git diff --check`
+
+### Deployment
+
+- Deploy `inkfig-main-system`; GitHub Actions must apply `20261006_007_delete_existing_works.sql` before deploying Lambda.
+- No environment-variable changes are required.
+- Supabase Storage image objects are not deleted and may be purged separately through the Storage API if required.
+
+### Git
+
+- Branch: `main`
+- Commit: `60175da`
+- Push: `successful`
+
+### Notes
+
+The database deletion is permanent. Preserving Storage objects avoids unsupported direct SQL deletion from Supabase Storage but leaves orphaned image files until an explicit Storage cleanup is performed.
