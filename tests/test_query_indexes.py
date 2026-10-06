@@ -32,3 +32,12 @@ def test_feed_query_uses_index_friendly_optional_predicates() -> None:
     assert "parameter is null OR" in repository
     assert "order by w.created_at desc, w.work_id desc" in repository
     assert "cast(:type_code as varchar) is null" not in repository
+
+
+def test_semantic_search_rejects_weak_matches() -> None:
+    repository = (
+        ROOT / "src" / "infrastructure" / "repositories" / "work_repository.py"
+    ).read_text(encoding="utf-8")
+
+    assert ">= :min_similarity" in repository
+    assert "order by e.embedding <=>" in repository

@@ -33,4 +33,5 @@ def get_work_service(
         storage,
         settings.works_bucket,
         embeddings,
+        settings.voyage_min_similarity,
     )

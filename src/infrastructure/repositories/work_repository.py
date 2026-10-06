@@ -284,12 +284,14 @@ class SqlAlchemyWorkRepository:
         embedding: list[float],
         limit: int,
         type_code: str | None,
+        min_similarity: float,
     ) -> list[WorkResponse]:
         filters = ["w.status = 'published'"]
         parameters: dict[str, object] = {
             "viewer": viewer_id,
             "embedding": self._vector_literal(embedding),
             "limit": limit,
+            "min_similarity": min_similarity,
         }
         if type_code is not None:
             filters.append("t.code = :type_code")
@@ -316,6 +318,7 @@ class SqlAlchemyWorkRepository:
                     left join work_likes l on l.work_id = w.work_id
                       and exists(select 1 from user_accounts la where la.user_id = l.user_id and la.account_status = 'active')
                     where {' and '.join(filters)}
+                      and (1 - (e.embedding <=> cast(:embedding as extensions.vector))) >= :min_similarity
                     group by w.work_id, p.full_name, t.type_id, e.embedding
                     order by e.embedding <=> cast(:embedding as extensions.vector), w.created_at desc
                     limit :limit

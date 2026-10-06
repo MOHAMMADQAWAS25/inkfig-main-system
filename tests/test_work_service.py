@@ -32,6 +32,7 @@ class FakeWorkRepository:
         self.embedding: list[float] | None = None
         self.search_embedding: list[float] | None = None
         self.search_type_code: str | None = None
+        self.search_min_similarity: float | None = None
         self.unembedded: list[tuple[UUID, str]] = []
 
     async def list_types(self) -> list[WorkTypeResponse]:
@@ -97,10 +98,12 @@ class FakeWorkRepository:
         embedding: list[float],
         limit: int,
         type_code: str | None,
+        min_similarity: float,
     ) -> list[WorkResponse]:
         del viewer_id, limit
         self.search_embedding = embedding
         self.search_type_code = type_code
+        self.search_min_similarity = min_similarity
         return []
 
     async def list_unembedded_paths(self, limit: int) -> list[tuple[UUID, str]]:
@@ -294,7 +297,7 @@ async def test_save_delegates_authenticated_user_scope() -> None:
 async def test_search_normalizes_query_and_uses_multimodal_embedding() -> None:
     repository = FakeWorkRepository()
     provider = FakeEmbeddingProvider()
-    service = WorkService(repository, FakeWorkStorage(), "works", provider)
+    service = WorkService(repository, FakeWorkStorage(), "works", provider, 0.31)
 
     result = await service.search("  moon   at night ", None, 20, "photography")
 
@@ -302,6 +305,7 @@ async def test_search_normalizes_query_and_uses_multimodal_embedding() -> None:
     assert provider.query == "moon at night"
     assert repository.search_embedding == [0.25, 0.75]
     assert repository.search_type_code == "photography"
+    assert repository.search_min_similarity == 0.31
 
 
 @pytest.mark.asyncio

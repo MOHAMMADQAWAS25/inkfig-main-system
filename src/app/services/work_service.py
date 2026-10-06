@@ -1,5 +1,6 @@
 import asyncio
 from datetime import datetime
+import logging
 from typing import ClassVar
 from uuid import UUID, uuid4
 
@@ -35,9 +36,11 @@ class WorkService:
         storage: WorkStorage,
         bucket: str,
         embedding_provider: WorkEmbeddingProvider | None = None,
+        min_similarity: float = 0.20,
     ) -> None:
         self._repository, self._storage, self._bucket = repository, storage, bucket
         self._embedding_provider = embedding_provider
+        self._min_similarity = min_similarity
 
     async def list_types(self) -> list[WorkTypeResponse]:
         return await self._repository.list_types()
@@ -73,6 +76,9 @@ class WorkService:
             except Exception:
                 # Artwork publication must not depend on an external AI provider.
                 # Missing embeddings are safe to retry through the backfill workflow.
+                logging.getLogger(__name__).exception(
+                    "Artwork embedding failed during publication", extra={"work_id": str(work_id)}
+                )
                 return
 
     async def search(
@@ -91,7 +97,7 @@ class WorkService:
         except Exception as error:
             raise WorkSearchUnavailableError from error
         items = await self._repository.search_published(
-            viewer_id, embedding, limit, type_code
+            viewer_id, embedding, limit, type_code, self._min_similarity
         )
         return WorkFeedResponse(items=items)
 
@@ -109,6 +115,9 @@ class WorkService:
                 return work_id, embedding
             except Exception:
                 # A failed item remains eligible for a later bounded retry.
+                logging.getLogger(__name__).exception(
+                    "Artwork embedding backfill failed", extra={"work_id": str(work_id)}
+                )
                 return None
 
         embedded = await asyncio.gather(

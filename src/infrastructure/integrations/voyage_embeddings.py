@@ -1,8 +1,12 @@
+import base64
+from io import BytesIO
 import json
+import math
 from functools import lru_cache
 from typing import Any
 
 import httpx
+from PIL import Image, ImageOps
 
 
 @lru_cache(maxsize=4)
@@ -24,6 +28,8 @@ def _secret_value(secret_id: str) -> str:
 
 class VoyageMultimodalEmbeddingClient:
     endpoint = "https://api.voyageai.com/v1/multimodalembeddings"
+    max_embedding_pixels = 2_000_000
+    max_source_pixels = 100_000_000
 
     def __init__(
         self,
@@ -50,10 +56,40 @@ class VoyageMultimodalEmbeddingClient:
         )
 
     async def embed_image(self, image_url: str) -> list[float]:
+        image_data_url = await self._prepare_image(image_url)
         return await self._embed(
-            [{"type": "image_url", "image_url": image_url}],
+            [{"type": "image_base64", "image_base64": image_data_url}],
             input_type="document",
         )
+
+    async def _prepare_image(self, image_url: str) -> str:
+        async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+            response = await client.get(image_url)
+        response.raise_for_status()
+        with Image.open(BytesIO(response.content)) as source:
+            source.seek(0)
+            image = ImageOps.exif_transpose(source)
+            width, height = image.size
+            pixels = width * height
+            if pixels <= 0 or pixels > self.max_source_pixels:
+                raise RuntimeError("Artwork image dimensions are unsafe to process.")
+            if pixels > self.max_embedding_pixels:
+                scale = math.sqrt(self.max_embedding_pixels / pixels)
+                image = image.resize(
+                    (max(1, int(width * scale)), max(1, int(height * scale))),
+                    Image.Resampling.LANCZOS,
+                )
+            if image.mode != "RGB":
+                if "A" in image.getbands():
+                    background = Image.new("RGB", image.size, "white")
+                    background.paste(image, mask=image.getchannel("A"))
+                    image = background
+                else:
+                    image = image.convert("RGB")
+            output = BytesIO()
+            image.save(output, format="JPEG", quality=88, optimize=True)
+        encoded = base64.b64encode(output.getvalue()).decode("ascii")
+        return f"data:image/jpeg;base64,{encoded}"
 
     async def _embed(
         self, content: list[dict[str, str]], input_type: str

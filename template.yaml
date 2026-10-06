@@ -61,6 +61,7 @@ Globals:
         VOYAGE_SECRET_ID: inkfig/main/voyage
         VOYAGE_MODEL: voyage-multimodal-3.5
         VOYAGE_EMBEDDING_DIMENSION: "1024"
+        VOYAGE_MIN_SIMILARITY: "0.20"
 
 Resources:
   HttpApi:
