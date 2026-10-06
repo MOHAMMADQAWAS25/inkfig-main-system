@@ -1741,3 +1741,63 @@ Add Voyage AI to let visitors find artworks from English or Arabic text descript
 ### Notes
 
 The first searches may take longer while at most five missing artwork embeddings are generated per request. Failed items remain eligible for a later retry, and normal publication remains available during Voyage outages.
+## 2026-10-06 - Restore Voyage deployment pipeline
+
+### Request
+
+Complete and deploy the Voyage semantic artwork search integration.
+
+### Changes
+
+- Made the optional `boto3` import type annotation portable across local development and GitHub Actions environments.
+- Left application behavior, API behavior, database schema, and authorization unchanged.
+
+### Repositories
+
+- `inkfig-main-system`: fixed CI type-check compatibility.
+
+### Files
+
+- `src/infrastructure/integrations/voyage_embeddings.py`: accepts both missing-module and untyped-module MyPy classifications.
+
+### API
+
+No API changes.
+
+### Database
+
+- Migration: `20261006_006_add_work_embeddings.sql`
+- No additional migration required; the Voyage migration was successfully applied by the restored deployment.
+
+### Permissions and scope
+
+- No permission changes.
+- Existing public-search and active-account scope remains validated by the backend.
+
+### Frontend
+
+No frontend changes.
+
+### Verification
+
+- `[passed] py -3.12 -m pytest` (25 tests)
+- `[passed] py -3.12 -m mypy src tests` (47 source files)
+- `[passed] GitHub Actions run 37504256584`
+- `[passed] AWS CloudFormation stack status UPDATE_COMPLETE`
+- `[passed] GET https://main-api.inkfig-hu.com/health`
+- `[failed] GET /api/v1/works/search?query=moon — Voyage returned HTTP 429 because the organization has no payment method and is limited to 3 requests per minute`
+
+### Deployment
+
+- `inkfig-main-system` deployed successfully, including the pgvector migration and Lambda policy.
+- Add a payment method to the Voyage organization to unlock standard rate limits; Voyage states the free Voyage 3 token allowance remains available afterward.
+
+### Git
+
+- Branch: `main`
+- Commit: `4f59663`
+- Push: `successful`
+
+### Notes
+
+The stored key, Secrets Manager secret, Lambda configuration, CloudFormation deployment, and database migration are correct. Reliable production search is externally blocked only by the Voyage account's reduced 3-RPM limit.
