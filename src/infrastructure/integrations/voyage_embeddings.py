@@ -7,7 +7,7 @@ import httpx
 
 @lru_cache(maxsize=4)
 def _secret_value(secret_id: str) -> str:
-    import boto3  # type: ignore[import-not-found]
+    import boto3  # type: ignore[import-not-found,import-untyped]
 
     response = boto3.client("secretsmanager").get_secret_value(SecretId=secret_id)
     raw = str(response.get("SecretString", ""))
