@@ -1665,3 +1665,79 @@ Updated published-work queries to require an active owner and to count likes onl
 - Verification: `git diff --check` passed.
 - Deployment: deploy after the user-system account-status migration.
 - Branch: `feature/account-status-lifecycle`; push to `main` after synchronization.
+## 2026-10-06 - Voyage semantic artwork search
+
+### Request
+
+Add Voyage AI to let visitors find artworks from English or Arabic text descriptions, with production-safe Lambda permissions and optimized vector storage.
+
+### Changes
+
+- Added a clean-architecture Voyage multimodal embedding adapter backed by AWS Secrets Manager.
+- Embedded newly published artwork images without making publication fail when Voyage is temporarily unavailable.
+- Added bounded automatic catch-up indexing for previously published artworks and missed embeddings.
+- Added cosine-similarity artwork search with optional work-type filtering and active-account enforcement.
+- Kept existing feeds, likes, saves, uploads, and profile behavior unchanged.
+
+### Repositories
+
+- `inkfig-main-system`: added semantic embedding, retrieval, persistence, API, migration, and Lambda configuration.
+- `inkfig-user-FE`: consumes the search API in the public home search experience.
+
+### Files
+
+- `src/infrastructure/integrations/voyage_embeddings.py`: calls Voyage multimodal embeddings and loads its API key securely.
+- `src/app/services/work_service.py`: orchestrates indexing, bounded catch-up, and semantic search.
+- `src/infrastructure/repositories/work_repository.py`: persists vectors and performs indexed cosine search.
+- `src/interface/api/routes/works.py`: exposes the semantic search endpoint.
+- `migrations/20261006_006_add_work_embeddings.sql`: enables pgvector and creates vector storage and an HNSW index.
+- `template.yaml`: configures Voyage and grants narrowly scoped Secrets Manager access.
+- `tests/test_work_service.py`: verifies search, catch-up, and failure resilience.
+- `tests/test_voyage_embeddings.py`: verifies Voyage request semantics.
+
+### API
+
+- `GET /api/v1/works/search`: accepts required `query` (2-500 characters), optional `type_code`, and `limit` (1-50); returns ranked published works, preserves optional viewer like/save state, and returns 503 when semantic search is unavailable.
+
+### Database
+
+- Migration: `20261006_006_add_work_embeddings.sql`
+- Enables the Supabase `vector` extension, creates `work_embeddings` with a cascading work foreign key, 1024-dimensional embeddings, model metadata and timestamps, and adds an HNSW cosine index. Rollback requires dropping `work_embeddings`; the shared vector extension should only be dropped after confirming no other feature uses it.
+
+### Permissions and scope
+
+- Public viewers and all roles may search published works; authentication remains optional and only enriches like/save state.
+- Only published works owned by active accounts are returned.
+- Existing `works.upload` backend authorization still controls publication; no new application permission is required.
+- Lambda can only read Secrets Manager resources matching `inkfig/main/voyage-*`; backend query scope is enforced by SQL.
+
+### Frontend
+
+- The existing localized home search bar now sends debounced semantic searches after two characters.
+- Category filters are passed to semantic search, and localized loading, empty, and unavailable states are shown.
+- Existing responsive artwork cards, navigation, detail modal, likes, saves, RTL/LTR behavior, and feed behavior remain unchanged.
+
+### Verification
+
+- `[passed] py -3.12 -m pytest` (25 tests)
+- `[passed] py -3.12 -m mypy src`
+- `[passed] sam build --cached`
+- `[passed] sam validate --lint` (template valid; local SAM telemetry metadata emitted a filesystem warning)
+- `[passed] npm.cmd test` (43 tests in `inkfig-user-FE`)
+- `[passed] npm.cmd run build` in `inkfig-user-FE`
+
+### Deployment
+
+- Deploy `inkfig-main-system` first; its workflow must run migration `20261006_006_add_work_embeddings.sql` before Lambda deployment.
+- Deploy `inkfig-user-FE` after the backend is healthy.
+- AWS Secrets Manager secret `inkfig/main/voyage` must contain `VOYAGE_API_KEY`; no Voyage key is exposed to the frontend or GitHub variables.
+
+### Git
+
+- Branch: `main`
+- Commit: `6c9f896`
+- Push: `successful`
+
+### Notes
+
+The first searches may take longer while at most five missing artwork embeddings are generated per request. Failed items remain eligible for a later retry, and normal publication remains available during Voyage outages.
