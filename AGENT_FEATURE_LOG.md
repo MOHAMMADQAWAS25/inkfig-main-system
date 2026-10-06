@@ -1923,3 +1923,76 @@ No frontend changes. Artwork feeds and profiles use their existing empty states 
 ### Notes
 
 This migration permanently deletes the current artwork database data. Preserved Storage objects become orphaned and are not visible through InkFig feeds.
+## 2026-10-07 - Support oversized artwork embeddings and relevant search results
+
+### Request
+
+Fix semantic search so high-resolution artworks are embedded, unrelated nearest-neighbor results are excluded, reset existing works, and prepare the system for live two-image testing.
+
+### Changes
+
+- Downloads each published artwork into Lambda memory and creates an aspect-ratio-preserving JPEG derivative capped at two million pixels for Voyage.
+- Keeps the original Supabase Storage object and its displayed resolution unchanged.
+- Added a configurable cosine-similarity threshold so weak matches are excluded instead of always returning the nearest indexed artwork.
+- Added structured exception logging for publication and catch-up embedding failures.
+- Added a one-time reset migration that deleted the current works and their cascading related records before retesting.
+
+### Repositories
+
+- `inkfig-main-system`: added safe image preprocessing, relevance filtering, diagnostics, reset migration, and tests.
+
+### Files
+
+- `src/infrastructure/integrations/voyage_embeddings.py`: fetches, safely validates, resizes, and encodes artwork derivatives for Voyage.
+- `src/infrastructure/repositories/work_repository.py`: applies the minimum semantic similarity filter.
+- `src/app/services/work_service.py`: passes search thresholds and logs embedding failures.
+- `src/infrastructure/config/settings.py`: adds the semantic similarity configuration.
+- `migrations/20261007_009_delete_works_before_search_retest.sql`: removes current artwork data before controlled retesting.
+- `tests/test_voyage_embeddings.py`: verifies in-memory resizing and aspect-ratio preservation.
+- `tests/test_query_indexes.py`: verifies semantic relevance filtering.
+
+### API
+
+- `GET /api/v1/works/search`: response shape is unchanged; results below `VOYAGE_MIN_SIMILARITY` are now omitted.
+
+### Database
+
+- Migration: `20261007_009_delete_works_before_search_retest.sql`
+- Deletes all `public.works` rows and cascades to links, likes, saves, and embeddings. The deletion has no automatic rollback. No schema or index changes were required.
+
+### Permissions and scope
+
+- No roles or permissions changed.
+- Search remains public and only returns published works owned by active accounts.
+- Upload and publication remain protected by `works.upload`, with authorization validated by the backend.
+
+### Frontend
+
+No frontend changes. Original images continue to be displayed from Supabase Storage at their uploaded resolution.
+
+### Verification
+
+- `[passed] py -3.12 -m pytest` (28 tests)
+- `[passed] py -3.12 -m mypy src tests` (48 source files)
+- `[passed] sam build --cached`
+- `[passed] GitHub Actions run 37546735220`
+- `[passed] GET /api/v1/works returned an empty feed after migration`
+- `[passed] close-up-full-bloom-flower.jpg confirmed as 3328x4864 (16,187,392 pixels), reproducing the previous Voyage limit failure`
+- `[passed] images (1).jfif confirmed as 415x740 (307,100 pixels)`
+- `[not run] authenticated browser uploads and UI searches — browser-control runtime is unavailable in this session`
+
+### Deployment
+
+- `inkfig-main-system` and migration `20261007_009_delete_works_before_search_retest.sql` deployed successfully.
+- Added Lambda dependency `Pillow==11.3.0`.
+- Added `VOYAGE_MIN_SIMILARITY=0.20`; no secret changes are required.
+
+### Git
+
+- Branch: `main`
+- Commit: `7ed81e9`
+- Push: `successful`
+
+### Notes
+
+The two requested files are available under `C:\Users\mohaamad\Downloads`. Live authenticated upload verification remains pending until browser control is available or the user uploads both files manually.
