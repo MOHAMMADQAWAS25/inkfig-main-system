@@ -36,6 +36,7 @@ class FakeWorkRepository:
         self.search_min_similarity: float | None = None
         self.search_offset: int | None = None
         self.search_limit: int | None = None
+        self.search_owner_id: UUID | None = None
         self.search_results: list[WorkSearchResponse] = []
         self.unembedded: list[tuple[UUID, str]] = []
 
@@ -104,6 +105,7 @@ class FakeWorkRepository:
         type_code: str | None,
         min_similarity: float,
         offset: int,
+        owner_id: UUID | None = None,
     ) -> list[WorkSearchResponse]:
         del viewer_id
         self.search_limit = limit
@@ -111,6 +113,7 @@ class FakeWorkRepository:
         self.search_type_code = type_code
         self.search_min_similarity = min_similarity
         self.search_offset = offset
+        self.search_owner_id = owner_id
         return self.search_results[:limit]
 
     async def list_unembedded_paths(self, limit: int) -> list[tuple[UUID, str]]:
@@ -316,6 +319,30 @@ async def test_search_normalizes_query_and_uses_multimodal_embedding() -> None:
     assert repository.search_offset == 0
     assert repository.search_limit == 21
     assert result.next_cursor is None
+
+
+@pytest.mark.asyncio
+async def test_search_can_be_scoped_to_a_selected_account() -> None:
+    repository = FakeWorkRepository()
+    owner_id = uuid4()
+    service = WorkService(
+        repository, FakeWorkStorage(), "works", FakeEmbeddingProvider()
+    )
+
+    await service.search("black cat", None, 20, owner_id=owner_id)
+
+    assert repository.search_owner_id == owner_id
+
+
+@pytest.mark.asyncio
+async def test_feed_can_list_all_works_for_a_selected_account() -> None:
+    repository = FakeWorkRepository()
+    owner_id = uuid4()
+    service = WorkService(repository, FakeWorkStorage(), "works")
+
+    await service.feed(None, 20, None, owner_id=owner_id)
+
+    assert repository.listed_owner_id == owner_id
 
 
 @pytest.mark.asyncio

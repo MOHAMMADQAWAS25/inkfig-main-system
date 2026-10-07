@@ -42,8 +42,9 @@ async def feed(
     limit: int = Query(20, ge=1, le=50),
     before: datetime | None = None,
     type_code: str | None = Query(default=None, min_length=1, max_length=64),
+    owner_user_id: UUID | None = None,
 ) -> WorkFeedResponse:
-    return await service.feed(viewer, limit, before, type_code)
+    return await service.feed(viewer, limit, before, type_code, owner_user_id)
 
 
 @router.get("/search", response_model=WorkSearchFeedResponse)
@@ -54,9 +55,12 @@ async def search(
     limit: int = Query(20, ge=1, le=50),
     type_code: str | None = Query(default=None, min_length=1, max_length=64),
     cursor: int = Query(0, ge=0, le=10_000),
+    owner_user_id: UUID | None = None,
 ) -> WorkSearchFeedResponse:
     try:
-        return await service.search(query, viewer, limit, type_code, cursor)
+        return await service.search(
+            query, viewer, limit, type_code, cursor, owner_user_id
+        )
     except WorkSearchUnavailableError as error:
         raise HTTPException(
             503, "Semantic artwork search is temporarily unavailable."

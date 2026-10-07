@@ -89,6 +89,7 @@ class WorkService:
         limit: int,
         type_code: str | None = None,
         cursor: int = 0,
+        owner_id: UUID | None = None,
     ) -> WorkSearchFeedResponse:
         normalized = " ".join(query.split())
         if self._embedding_provider is None:
@@ -99,7 +100,13 @@ class WorkService:
         except Exception as error:
             raise WorkSearchUnavailableError from error
         items = await self._repository.search_published(
-            viewer_id, embedding, limit + 1, type_code, self._min_similarity, cursor
+            viewer_id,
+            embedding,
+            limit + 1,
+            type_code,
+            self._min_similarity,
+            cursor,
+            owner_id,
         )
         next_cursor = cursor + limit if len(items) > limit else None
         return WorkSearchFeedResponse(items=items[:limit], next_cursor=next_cursor)
@@ -138,9 +145,10 @@ class WorkService:
         limit: int,
         before: datetime | None,
         type_code: str | None = None,
+        owner_id: UUID | None = None,
     ) -> WorkFeedResponse:
         items = await self._repository.list_published(
-            viewer_id, limit + 1, before, type_code
+            viewer_id, limit + 1, before, type_code, owner_id=owner_id
         )
         next_cursor = items[limit - 1].created_at if len(items) > limit else None
         return WorkFeedResponse(items=items[:limit], next_cursor=next_cursor)

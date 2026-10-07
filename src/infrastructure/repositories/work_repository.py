@@ -287,6 +287,7 @@ class SqlAlchemyWorkRepository:
         type_code: str | None,
         min_similarity: float,
         offset: int,
+        owner_id: UUID | None = None,
     ) -> list[WorkSearchResponse]:
         filters = ["w.status = 'published'"]
         parameters: dict[str, object] = {
@@ -296,6 +297,9 @@ class SqlAlchemyWorkRepository:
             "min_similarity": min_similarity,
             "offset": offset,
         }
+        if owner_id is not None:
+            filters.append("w.owner_user_id = :owner_id")
+            parameters["owner_id"] = owner_id
         if type_code is not None:
             filters.append("t.code = :type_code")
             parameters["type_code"] = type_code
