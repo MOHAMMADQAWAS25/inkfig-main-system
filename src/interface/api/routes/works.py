@@ -11,9 +11,11 @@ from src.entities.dto.works import (
     WorkSearchFeedResponse,
     WorkTypeResponse,
     WorkUploadResponse,
+    UpdateWorkRequest,
 )
 from src.entities.exceptions.works import (
     StorageUploadError,
+    StorageDeleteError,
     UnsupportedWorkFileError,
     WorkNotFoundError,
     WorkSearchUnavailableError,
@@ -183,3 +185,32 @@ async def unsave(
         await service.save(work_id, user, False)
     except WorkNotFoundError as e:
         raise HTTPException(404, "Work not found.") from e
+
+
+@router.patch("/{work_id}", status_code=204)
+async def update_work(
+    work_id: UUID,
+    request: UpdateWorkRequest,
+    service: Annotated[WorkService, Depends(get_work_service)],
+    user: Annotated[UUID, Depends(require_permission("works.upload"))],
+) -> None:
+    try:
+        await service.update(work_id, user, request)
+    except WorkTypeNotFoundError as error:
+        raise HTTPException(422, "The selected work type is unavailable.") from error
+    except WorkNotFoundError as error:
+        raise HTTPException(404, "Work not found.") from error
+
+
+@router.delete("/{work_id}", status_code=204)
+async def delete_work(
+    work_id: UUID,
+    service: Annotated[WorkService, Depends(get_work_service)],
+    user: Annotated[UUID, Depends(require_permission("works.upload"))],
+) -> None:
+    try:
+        await service.delete(work_id, user)
+    except WorkNotFoundError as error:
+        raise HTTPException(404, "Work not found.") from error
+    except StorageDeleteError as error:
+        raise HTTPException(503, "Artwork storage could not be deleted safely.") from error

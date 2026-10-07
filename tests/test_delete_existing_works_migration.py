@@ -33,3 +33,18 @@ def test_legacy_reset_has_a_safe_storage_cleanup_migration() -> None:
     assert "WORKS_BUCKET is not exactly 'works'" in cleanup
     assert '"prefixes": list(paths)' in cleanup
     assert "orphaned work-storage objects remain" in cleanup
+
+
+def test_every_work_owned_table_cascades_when_a_work_is_deleted() -> None:
+    migration_directory = Path(__file__).parents[1] / "migrations"
+    migrations = {
+        "work_likes": "20261001_001_create_works.sql",
+        "work_links": "20261004_003_create_work_links.sql",
+        "work_saves": "20261005_004_create_work_saves.sql",
+        "work_embeddings": "20261006_006_add_work_embeddings.sql",
+    }
+
+    for table, filename in migrations.items():
+        sql = (migration_directory / filename).read_text(encoding="utf-8").lower()
+        assert f"{table}" in sql
+        assert "references public.works(work_id) on delete cascade" in sql

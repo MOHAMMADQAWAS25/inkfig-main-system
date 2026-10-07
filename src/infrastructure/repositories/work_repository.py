@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.entities.dto.works import (
     CreateWorkUploadRequest,
+    UpdateWorkRequest,
     WorkResponse,
     WorkSearchResponse,
     WorkTypeResponse,
@@ -259,6 +260,65 @@ class SqlAlchemyWorkRepository:
             )
             await self._session.commit()
         return True
+
+    async def update_owned(
+        self, work_id: UUID, owner_id: UUID, data: UpdateWorkRequest
+    ) -> bool:
+        model = await self._session.scalar(
+            select(WorkModel).where(
+                WorkModel.work_id == work_id,
+                WorkModel.owner_user_id == owner_id,
+                WorkModel.status == "published",
+            )
+        )
+        type_exists = await self._session.scalar(
+            select(WorkTypeModel.type_id).where(
+                WorkTypeModel.type_id == data.type_id,
+                WorkTypeModel.is_active.is_(True),
+            )
+        )
+        if model is None:
+            return False
+        if type_exists is None:
+            from src.entities.exceptions.works import WorkTypeNotFoundError
+
+            raise WorkTypeNotFoundError
+        model.type_id = data.type_id
+        model.title = data.title.strip()
+        model.description = data.description.strip()
+        await self._session.execute(
+            delete(WorkLinkModel).where(WorkLinkModel.work_id == work_id)
+        )
+        self._session.add_all(
+            WorkLinkModel(
+                work_id=work_id,
+                url=str(link.url),
+                label=link.label.strip() if link.label else None,
+                position=position,
+            )
+            for position, link in enumerate(data.links)
+        )
+        await self._session.commit()
+        return True
+
+    async def owned_storage_path(self, work_id: UUID, owner_id: UUID) -> str | None:
+        return await self._session.scalar(
+            select(WorkModel.storage_path).where(
+                WorkModel.work_id == work_id,
+                WorkModel.owner_user_id == owner_id,
+                WorkModel.status == "published",
+            )
+        )
+
+    async def delete_owned(self, work_id: UUID, owner_id: UUID) -> bool:
+        deleted_id = await self._session.scalar(
+            delete(WorkModel).where(
+                WorkModel.work_id == work_id,
+                WorkModel.owner_user_id == owner_id,
+            ).returning(WorkModel.work_id)
+        )
+        await self._session.commit()
+        return deleted_id is not None
 
     async def save_embedding(
         self, work_id: UUID, embedding: list[float], model_name: str

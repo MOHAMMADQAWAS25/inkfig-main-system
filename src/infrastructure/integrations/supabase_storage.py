@@ -2,7 +2,7 @@ from urllib.parse import quote
 
 import httpx
 
-from src.entities.exceptions.works import StorageUploadError
+from src.entities.exceptions.works import StorageDeleteError, StorageUploadError
 
 
 class SupabaseWorkStorage:
@@ -38,6 +38,18 @@ class SupabaseWorkStorage:
         return f"{self._url}/storage/v1/object/public/{self._bucket}/{quote(path, safe='/')}"
 
     async def object_exists(self, path: str) -> bool:
+        endpoint = f"{self._url}/storage/v1/object/{self._bucket}/{quote(path, safe='/')}"
+        headers = {"apikey": self._secret, "Authorization": f"Bearer {self._secret}"}
         async with httpx.AsyncClient(timeout=10) as client:
-            response = await client.head(self.public_url(path))
+            response = await client.head(endpoint, headers=headers)
         return response.status_code == 200
+
+    async def delete_object(self, path: str) -> None:
+        endpoint = f"{self._url}/storage/v1/object/{self._bucket}"
+        headers = {"apikey": self._secret, "Authorization": f"Bearer {self._secret}"}
+        async with httpx.AsyncClient(timeout=10) as client:
+            response = await client.request(
+                "DELETE", endpoint, headers=headers, json={"prefixes": [path]}
+            )
+        if response.is_error or await self.object_exists(path):
+            raise StorageDeleteError

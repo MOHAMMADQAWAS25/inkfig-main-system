@@ -7,6 +7,7 @@ from pydantic import HttpUrl, ValidationError
 from src.app.services.work_service import WorkService
 from src.entities.dto.works import (
     CreateWorkUploadRequest,
+    UpdateWorkRequest,
     WorkLinkRequest,
     WorkResponse,
     WorkSearchResponse,
@@ -39,6 +40,9 @@ class FakeWorkRepository:
         self.search_owner_id: UUID | None = None
         self.search_results: list[WorkSearchResponse] = []
         self.unembedded: list[tuple[UUID, str]] = []
+        self.updated: UpdateWorkRequest | None = None
+        self.owned_path: str | None = None
+        self.deleted = False
 
     async def list_types(self) -> list[WorkTypeResponse]:
         return []
@@ -91,6 +95,22 @@ class FakeWorkRepository:
         self.saved = saved
         return True
 
+    async def update_owned(
+        self, work_id: UUID, owner_id: UUID, data: UpdateWorkRequest
+    ) -> bool:
+        del work_id, owner_id
+        self.updated = data
+        return True
+
+    async def owned_storage_path(self, work_id: UUID, owner_id: UUID) -> str | None:
+        del work_id, owner_id
+        return self.owned_path
+
+    async def delete_owned(self, work_id: UUID, owner_id: UUID) -> bool:
+        del work_id, owner_id
+        self.deleted = True
+        return True
+
     async def save_embedding(
         self, work_id: UUID, embedding: list[float], model_name: str
     ) -> None:
@@ -123,6 +143,7 @@ class FakeWorkRepository:
 class FakeWorkStorage:
     def __init__(self, exists: bool = True) -> None:
         self.exists = exists
+        self.deleted_path: str | None = None
 
     async def create_signed_upload(self, path: str) -> tuple[str, str]:
         return f"https://storage.test/{path}?token=signed", "signed"
@@ -130,6 +151,9 @@ class FakeWorkStorage:
     async def object_exists(self, path: str) -> bool:
         del path
         return self.exists
+
+    async def delete_object(self, path: str) -> None:
+        self.deleted_path = path
 
     def public_url(self, path: str) -> str:
         return f"https://storage.test/{path}"
@@ -301,6 +325,62 @@ async def test_save_delegates_authenticated_user_scope() -> None:
     await service.save(uuid4(), uuid4(), True)
 
     assert repository.saved is True
+
+
+@pytest.mark.asyncio
+async def test_owner_can_update_metadata_without_an_image_field() -> None:
+    repository = FakeWorkRepository()
+    service = WorkService(repository, FakeWorkStorage(), "works")
+    request = UpdateWorkRequest(
+        type_id=uuid4(),
+        title="Updated title",
+        description="Updated description",
+        links=[],
+    )
+
+    await service.update(uuid4(), uuid4(), request)
+
+    assert repository.updated == request
+    assert "image" not in UpdateWorkRequest.model_json_schema()["properties"]
+
+
+@pytest.mark.asyncio
+async def test_delete_removes_storage_before_cascading_database_delete() -> None:
+    events: list[str] = []
+
+    class OrderedRepository(FakeWorkRepository):
+        async def delete_owned(self, work_id: UUID, owner_id: UUID) -> bool:
+            events.append("database")
+            return await super().delete_owned(work_id, owner_id)
+
+    class OrderedStorage(FakeWorkStorage):
+        async def delete_object(self, path: str) -> None:
+            events.append("storage")
+            await super().delete_object(path)
+
+    repository = OrderedRepository()
+    repository.owned_path = "owner/work.png"
+    storage = OrderedStorage()
+    service = WorkService(repository, storage, "works")
+
+    await service.delete(uuid4(), uuid4())
+
+    assert events == ["storage", "database"]
+    assert storage.deleted_path == "owner/work.png"
+    assert repository.deleted is True
+
+
+@pytest.mark.asyncio
+async def test_delete_rejects_non_owner_without_touching_storage() -> None:
+    repository = FakeWorkRepository()
+    storage = FakeWorkStorage()
+    service = WorkService(repository, storage, "works")
+
+    with pytest.raises(WorkNotFoundError):
+        await service.delete(uuid4(), uuid4())
+
+    assert storage.deleted_path is None
+    assert repository.deleted is False
 
 
 @pytest.mark.asyncio

@@ -10,6 +10,7 @@ from src.entities.dto.works import (
     WorkSearchFeedResponse,
     WorkTypeResponse,
     WorkUploadResponse,
+    UpdateWorkRequest,
 )
 from src.entities.exceptions.works import (
     UnsupportedWorkFileError,
@@ -196,4 +197,18 @@ class WorkService:
 
     async def save(self, work_id: UUID, user_id: UUID, saved: bool) -> None:
         if not await self._repository.set_save(work_id, user_id, saved):
+            raise WorkNotFoundError
+
+    async def update(
+        self, work_id: UUID, user_id: UUID, data: UpdateWorkRequest
+    ) -> None:
+        if not await self._repository.update_owned(work_id, user_id, data):
+            raise WorkNotFoundError
+
+    async def delete(self, work_id: UUID, user_id: UUID) -> None:
+        path = await self._repository.owned_storage_path(work_id, user_id)
+        if path is None:
+            raise WorkNotFoundError
+        await self._storage.delete_object(path)
+        if not await self._repository.delete_owned(work_id, user_id):
             raise WorkNotFoundError

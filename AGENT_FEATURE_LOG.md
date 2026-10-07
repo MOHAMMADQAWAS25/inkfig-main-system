@@ -2219,3 +2219,55 @@ When an account is selected through the frontend `@` search, return that user's 
 ### Notes
 
 The existing local `samconfig.toml` modification was intentionally left unchanged and excluded from the commit.
+## 2026-10-07 - Add owner-controlled work editing and complete deletion
+
+### Request
+
+Allow users to edit and delete only their own posts, prohibit image replacement during editing, and remove every post-owned database and storage resource when deleting.
+
+### Changes
+
+- Added owner-scoped metadata editing for title, description, category, and up to ten unique HTTP/HTTPS links.
+- Deliberately excluded image, storage path, MIME type, and file size from the update contract.
+- Added owner-scoped deletion that deletes and verifies the Supabase object before removing the work row.
+- Relies on existing database cascades to remove the work's links, likes, saves, and Voyage embedding with the work row.
+- Added validation for nonblank normalized titles and focused ownership/deletion-order tests.
+
+### Repositories
+
+- `inkfig-main-system`: backend contracts, authorization, persistence, storage deletion, tests, and this log.
+- `inkfig-user-FE`: owner controls, editor, deletion confirmation, profile layout, and localization.
+- `inkfig-user-system`: no changes required.
+
+### API
+
+- `PATCH /api/v1/works/{work_id}` updates owner-controlled metadata only.
+- `DELETE /api/v1/works/{work_id}` permanently deletes the authenticated owner's work.
+- Both endpoints require `works.upload`; repository predicates independently enforce `owner_user_id`.
+
+### Database
+
+- No migration required.
+- Existing `ON DELETE CASCADE` constraints remove `work_links`, `work_likes`, `work_saves`, and `work_embeddings` records.
+
+### Permissions and SnapStart
+
+- Only the authenticated owner can mutate a work; non-owned and missing works return the same not-found response.
+- Storage clients remain request-scoped and retain AWS Lambda SnapStart compatibility.
+
+### Verification
+
+- `[passed] git diff --check`
+- `[passed] cascade audit` - every work-owned relational table uses `ON DELETE CASCADE`.
+- `[added] service tests` - cover metadata-only editing, storage-before-database deletion, and non-owner rejection.
+- `[not run] pytest and mypy` - no usable Python runtime or repository virtual environment is installed on this machine; GitHub Actions will run both.
+
+### Deployment
+
+- Deploy `inkfig-main-system` before `inkfig-user-FE`.
+- No migration, secret, or environment-variable changes are required.
+
+### Git
+
+- Branch: `feature/owner-work-management`
+- Commit, rebase, push, merge, and main push: pending final synchronization.

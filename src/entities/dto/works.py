@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field, HttpUrl, model_validator
+from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
 
 
 class WorkTypeResponse(BaseModel):
@@ -32,6 +32,33 @@ class CreateWorkUploadRequest(BaseModel):
 
     @model_validator(mode="after")
     def links_must_be_unique(self) -> "CreateWorkUploadRequest":
+        urls = [str(link.url) for link in self.links]
+        if len(urls) != len(set(urls)):
+            raise ValueError("Work links must be unique.")
+        return self
+
+
+class UpdateWorkRequest(BaseModel):
+    type_id: UUID
+    title: str = Field(min_length=1, max_length=160)
+    description: str = Field(default="", max_length=2000)
+    links: list[WorkLinkRequest] = Field(default_factory=list, max_length=10)
+
+    @field_validator("title")
+    @classmethod
+    def title_must_have_content(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Work title must not be blank.")
+        return normalized
+
+    @field_validator("description")
+    @classmethod
+    def normalize_description(cls, value: str) -> str:
+        return value.strip()
+
+    @model_validator(mode="after")
+    def links_must_be_unique(self) -> "UpdateWorkRequest":
         urls = [str(link.url) for link in self.links]
         if len(urls) != len(set(urls)):
             raise ValueError("Work links must be unique.")

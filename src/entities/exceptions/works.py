@@ -16,3 +16,7 @@ class UnsupportedWorkFileError(Exception):
 
 class StorageUploadError(Exception):
     pass
+
+
+class StorageDeleteError(Exception):
+    pass
