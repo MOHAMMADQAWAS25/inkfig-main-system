@@ -2071,3 +2071,80 @@ No migration required. Similarity and rank are calculated at query/request time 
 ### Notes
 
 `similarity_score` is cosine similarity, not a probability or confidence percentage.
+
+## 2026-10-07 - Paginate semantic artwork search
+
+### Request
+
+Complete pagination across InkFig so artwork feeds and ranked semantic-search results can load beyond their first page.
+
+### Changes
+
+- Added a bounded continuation cursor to semantic search and returns `next_cursor` when more ranked results exist.
+- Fetches one extra search row to determine whether another page exists without issuing a separate count query.
+- Preserves continuous one-based search ranks across pages by starting each page at its cursor offset.
+- Kept existing timestamp cursor pagination for public, profile, liked, and saved feeds unchanged.
+- Preserved similarity thresholds, category filtering, active-account scope, and viewer-specific interaction state.
+- Intentionally left the existing local `samconfig.toml` modification unchanged.
+
+### Repositories
+
+- `inkfig-main-system`: adds ranked semantic-search continuation support.
+- `inkfig-user-FE`: consumes pagination for home, search, profile posts, likes, and saved works.
+
+### Files
+
+- `src/entities/dto/works.py`: adds `next_cursor` to semantic-search feeds.
+- `src/entities/repositories/works.py`: adds repository offset input.
+- `src/app/services/work_service.py`: computes the next search cursor using a limit-plus-one query.
+- `src/infrastructure/repositories/work_repository.py`: applies the bounded offset and continuous rank numbering.
+- `src/interface/api/routes/works.py`: accepts the validated search cursor.
+- `tests/test_query_indexes.py`: verifies pagination query and rank behavior.
+- `tests/test_work_service.py`: verifies continuation cursors, page size, and continuous ranks.
+
+### API
+
+- `GET /api/v1/works/search`: accepts optional `cursor` from 0 through 10,000 and returns nullable integer `next_cursor`; `limit`, `query`, `type_code`, ranking metadata, validation, public access, thresholding, and 503 behavior remain.
+- `GET /api/v1/works`, `/me`, `/likes`, `/saves`, and `/users/{user_id}` retain their existing `before` timestamp cursor and nullable `next_cursor` behavior.
+
+### Database
+
+No migration required. Pagination uses existing ordering, pgvector search, feed indexes, and runtime query parameters. No schema, constraint, default, foreign-key, index, backfill, or rollback change is required.
+
+### Permissions and scope
+
+- Public feed and search pagination require no permission.
+- Profile likes and saves still require `profile.read_own`.
+- Search continues to return only published works owned by active accounts.
+- Viewer like/save personalization and all authorization remain backend-validated.
+
+### Frontend
+
+- Home feed, semantic search, profile posts, likes, and saved works now consume continuation cursors through a localized Load more flow.
+- Search ranking remains continuous and ordered across pages.
+- Duplicate artwork IDs are excluded while appending pages.
+
+### Verification
+
+- `[passed] uv run --with-requirements requirements.txt pytest -q - 30 passed`
+- `[passed] uv run --with-requirements requirements.txt mypy src tests - no issues in 48 source files`
+- `[passed] focused ruff check - all checks passed`
+- `[passed] git diff --check`
+- `[passed] frontend npm.cmd test - 44 passed`
+- `[passed] frontend npm.cmd run build - TypeScript and Vite production build succeeded`
+
+### Deployment
+
+- Deploy `inkfig-main-system` before `inkfig-user-FE`.
+- No migrations must run before deployment.
+- No environment-variable, secret, or configuration changes are required.
+
+### Git
+
+- Branch: `main`
+- Commit: `c5e8c03`
+- Push: `successful`
+
+### Notes
+
+Semantic-search continuation is bounded to 10,000 ranked results to prevent unbounded database offsets.
