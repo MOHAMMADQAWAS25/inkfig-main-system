@@ -2148,3 +2148,74 @@ No migration required. Pagination uses existing ordering, pgvector search, feed 
 ### Notes
 
 Semantic-search continuation is bounded to 10,000 ranked results to prevent unbounded database offsets.
+## 2026-10-07 - Scope artwork feeds and semantic search to a selected account
+
+### Request
+
+When an account is selected through the frontend `@` search, return that user's matching works; when no artwork words accompany the selected account, return all public works for that user.
+
+### Changes
+
+- Added an optional immutable owner-user filter to the public artwork feed.
+- Added the same owner filter to ranked semantic image search.
+- Preserved category filtering, pagination, active-account scope, published-only scope, ranking, and viewer interaction state.
+- Left uploads, likes, saves, embeddings, thresholds, and existing profile-feed routes unchanged.
+
+### Repositories
+
+- `inkfig-main-system`: owner-scoped public feed and semantic-search API behavior.
+- `inkfig-user-system`: supplies privacy-safe account IDs from live account discovery.
+- `inkfig-user-FE`: chooses between owner-only feed and owner-scoped semantic search.
+
+### Files
+
+- `src/entities/repositories/works.py`: extends semantic-search persistence with an optional owner ID.
+- `src/app/services/work_service.py`: propagates owner scope through feed and search use cases.
+- `src/infrastructure/repositories/work_repository.py`: applies a parameterized owner predicate to semantic search.
+- `src/interface/api/routes/works.py`: accepts `owner_user_id` on public feed and search endpoints.
+- `tests/test_work_service.py`: verifies owner scope for both paths.
+
+### API
+
+- `GET /api/v1/works`: accepts optional UUID `owner_user_id`; returns only published works from that active owner, with existing `type_code`, `before`, `limit`, and interaction behavior unchanged.
+- `GET /api/v1/works/search`: accepts optional UUID `owner_user_id`; ranks only that active owner's published embedded works against the existing required `query`, with existing `type_code`, `cursor`, `limit`, threshold, ranking fields, validation, and 503 behavior unchanged.
+
+### Database
+
+- Migration: `No migration required`
+- Owner filtering uses the existing owner/feed indexes and embedding structures. No schema, default, constraint, foreign-key, backfill, or rollback change is required.
+
+### Permissions and scope
+
+- No authenticated permission is required for public feed or search access.
+- Viewer, user, supervisor, admin, and system-administrator clients receive published works belonging to active accounts only.
+- The backend validates the UUID and enforces owner, publication, account-status, category, threshold, and pagination scope.
+
+### Frontend
+
+- `@Selected Account` with no other words uses the owner-filtered chronological feed.
+- Artwork text combined with a selected account uses owner-filtered semantic ranking.
+- Existing cards, category filters, responsive masonry layout, pagination, and interaction controls remain unchanged.
+
+### Verification
+
+- `[passed] uv run --with-requirements requirements.txt pytest -q - 32 passed`
+- `[passed] uv run --with-requirements requirements.txt mypy src tests - no issues in 48 source files`
+- `[passed] focused ruff check for all changed main-backend files`
+- `[passed] git diff --check`
+
+### Deployment
+
+- Deploy `inkfig-main-system` after `inkfig-user-system` and before `inkfig-user-FE`.
+- No migrations must run for this repository.
+- No environment-variable or configuration changes are required.
+
+### Git
+
+- Branch: `main`
+- Commit: `c1fd31d`
+- Push: `successful`
+
+### Notes
+
+The existing local `samconfig.toml` modification was intentionally left unchanged and excluded from the commit.
