@@ -1,5 +1,5 @@
-from datetime import datetime, timezone
 import math
+from datetime import datetime, timezone
 from uuid import UUID
 
 from sqlalchemy import delete, select, text
@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.entities.dto.works import (
     CreateWorkUploadRequest,
     WorkResponse,
+    WorkSearchResponse,
     WorkTypeResponse,
 )
 from src.infrastructure.db.postgres.models.work import (
@@ -285,7 +286,7 @@ class SqlAlchemyWorkRepository:
         limit: int,
         type_code: str | None,
         min_similarity: float,
-    ) -> list[WorkResponse]:
+    ) -> list[WorkSearchResponse]:
         filters = ["w.status = 'published'"]
         parameters: dict[str, object] = {
             "viewer": viewer_id,
@@ -306,6 +307,8 @@ class SqlAlchemyWorkRepository:
                            coalesce((select jsonb_agg(jsonb_build_object('url', wl.url, 'label', wl.label) order by wl.position)
                                      from work_links wl where wl.work_id = w.work_id), '[]'::jsonb) as links,
                            w.storage_path, w.mime_type, w.created_at,
+                           1 - (e.embedding <=> cast(:embedding as extensions.vector))
+                             as similarity_score,
                            count(l.user_id) as like_count,
                            coalesce(bool_or(l.user_id = cast(:viewer as uuid)), false) as liked,
                            exists(select 1 from work_saves s where s.work_id = w.work_id
@@ -328,7 +331,7 @@ class SqlAlchemyWorkRepository:
             )
         ).mappings()
         return [
-            WorkResponse(
+            WorkSearchResponse(
                 work_id=r.work_id,
                 owner_user_id=r.owner_user_id,
                 artist_name=r.artist_name,
@@ -344,8 +347,10 @@ class SqlAlchemyWorkRepository:
                 liked_by_me=r.liked,
                 saved_by_me=r.saved,
                 created_at=r.created_at,
+                search_rank=rank,
+                similarity_score=float(r.similarity_score),
             )
-            for r in rows
+            for rank, r in enumerate(rows, start=1)
         ]
 
     async def list_unembedded_paths(self, limit: int) -> list[tuple[UUID, str]]:

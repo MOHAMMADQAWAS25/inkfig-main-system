@@ -41,3 +41,6 @@ def test_semantic_search_rejects_weak_matches() -> None:
 
     assert ">= :min_similarity" in repository
     assert "order by e.embedding <=>" in repository
+    assert "as similarity_score" in repository
+    assert "enumerate(rows, start=1)" in repository
+    assert "search_rank=rank" in repository

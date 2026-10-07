@@ -9,6 +9,7 @@ from src.entities.dto.works import (
     CreateWorkUploadRequest,
     WorkLinkRequest,
     WorkResponse,
+    WorkSearchResponse,
     WorkTypeResponse,
 )
 from src.entities.exceptions.works import (
@@ -99,7 +100,7 @@ class FakeWorkRepository:
         limit: int,
         type_code: str | None,
         min_similarity: float,
-    ) -> list[WorkResponse]:
+    ) -> list[WorkSearchResponse]:
         del viewer_id, limit
         self.search_embedding = embedding
         self.search_type_code = type_code
@@ -306,6 +307,29 @@ async def test_search_normalizes_query_and_uses_multimodal_embedding() -> None:
     assert repository.search_embedding == [0.25, 0.75]
     assert repository.search_type_code == "photography"
     assert repository.search_min_similarity == 0.31
+
+
+def test_work_response_accepts_search_ranking_metadata() -> None:
+    response = WorkSearchResponse(
+        work_id=uuid4(),
+        owner_user_id=uuid4(),
+        artist_name="InkFig artist",
+        type_id=uuid4(),
+        type_name_en="Photography",
+        type_name_ar="Photography",
+        title="Moon",
+        description="",
+        links=[],
+        image_url="https://storage.test/moon.jpg",
+        mime_type="image/jpeg",
+        like_count=0,
+        created_at=datetime.now(timezone.utc),
+        search_rank=1,
+        similarity_score=0.91,
+    )
+
+    assert response.search_rank == 1
+    assert response.similarity_score == 0.91
 
 
 @pytest.mark.asyncio

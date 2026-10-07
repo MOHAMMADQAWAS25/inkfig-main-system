@@ -1,12 +1,13 @@
 import asyncio
-from datetime import datetime
 import logging
+from datetime import datetime
 from typing import ClassVar
 from uuid import UUID, uuid4
 
 from src.entities.dto.works import (
     CreateWorkUploadRequest,
     WorkFeedResponse,
+    WorkSearchFeedResponse,
     WorkTypeResponse,
     WorkUploadResponse,
 )
@@ -87,7 +88,7 @@ class WorkService:
         viewer_id: UUID | None,
         limit: int,
         type_code: str | None = None,
-    ) -> WorkFeedResponse:
+    ) -> WorkSearchFeedResponse:
         normalized = " ".join(query.split())
         if self._embedding_provider is None:
             raise WorkSearchUnavailableError
@@ -99,7 +100,7 @@ class WorkService:
         items = await self._repository.search_published(
             viewer_id, embedding, limit, type_code, self._min_similarity
         )
-        return WorkFeedResponse(items=items)
+        return WorkSearchFeedResponse(items=items)
 
     async def _backfill_missing_embeddings(self) -> None:
         if self._embedding_provider is None:

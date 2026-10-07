@@ -5,6 +5,7 @@ from uuid import UUID
 from src.entities.dto.works import (
     CreateWorkUploadRequest,
     WorkResponse,
+    WorkSearchResponse,
     WorkTypeResponse,
 )
 
@@ -43,7 +44,7 @@ class WorkRepository(Protocol):
         limit: int,
         type_code: str | None,
         min_similarity: float,
-    ) -> list[WorkResponse]: ...
+    ) -> list[WorkSearchResponse]: ...
     async def list_unembedded_paths(self, limit: int) -> list[tuple[UUID, str]]: ...
 
 

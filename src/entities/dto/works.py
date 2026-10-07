@@ -66,3 +66,12 @@ class WorkResponse(BaseModel):
 class WorkFeedResponse(BaseModel):
     items: list[WorkResponse]
     next_cursor: datetime | None = None
+
+
+class WorkSearchResponse(WorkResponse):
+    search_rank: int = Field(ge=1)
+    similarity_score: float = Field(ge=-1.0, le=1.0)
+
+
+class WorkSearchFeedResponse(BaseModel):
+    items: list[WorkSearchResponse]

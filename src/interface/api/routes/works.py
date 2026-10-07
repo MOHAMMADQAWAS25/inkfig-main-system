@@ -8,6 +8,7 @@ from src.app.services.work_service import WorkService
 from src.entities.dto.works import (
     CreateWorkUploadRequest,
     WorkFeedResponse,
+    WorkSearchFeedResponse,
     WorkTypeResponse,
     WorkUploadResponse,
 )
@@ -45,14 +46,14 @@ async def feed(
     return await service.feed(viewer, limit, before, type_code)
 
 
-@router.get("/search", response_model=WorkFeedResponse)
+@router.get("/search", response_model=WorkSearchFeedResponse)
 async def search(
     service: Annotated[WorkService, Depends(get_work_service)],
     viewer: Annotated[UUID | None, Depends(get_optional_user)],
     query: str = Query(min_length=2, max_length=500),
     limit: int = Query(20, ge=1, le=50),
     type_code: str | None = Query(default=None, min_length=1, max_length=64),
-) -> WorkFeedResponse:
+) -> WorkSearchFeedResponse:
     try:
         return await service.search(query, viewer, limit, type_code)
     except WorkSearchUnavailableError as error:
