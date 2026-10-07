@@ -216,12 +216,12 @@ class SqlAlchemyWorkRepository:
         ]
 
     async def set_like(self, work_id: UUID, user_id: UUID, liked: bool) -> bool:
-        exists = await self._session.scalar(
-            select(WorkModel.work_id).where(
+        owner_id = await self._session.scalar(
+            select(WorkModel.owner_user_id).where(
                 WorkModel.work_id == work_id, WorkModel.status == "published"
             )
         )
-        if exists is None:
+        if owner_id is None:
             return False
         if liked:
             self._session.add(WorkLikeModel(work_id=work_id, user_id=user_id))
@@ -236,15 +236,17 @@ class SqlAlchemyWorkRepository:
                 )
             )
             await self._session.commit()
+        if liked and owner_id != user_id:
+            await self._record_notification(owner_id, user_id, "like", work_id)
         return True
 
     async def set_save(self, work_id: UUID, user_id: UUID, saved: bool) -> bool:
-        exists = await self._session.scalar(
-            select(WorkModel.work_id).where(
+        owner_id = await self._session.scalar(
+            select(WorkModel.owner_user_id).where(
                 WorkModel.work_id == work_id, WorkModel.status == "published"
             )
         )
-        if exists is None:
+        if owner_id is None:
             return False
         if saved:
             self._session.add(WorkSaveModel(work_id=work_id, user_id=user_id))
@@ -259,7 +261,25 @@ class SqlAlchemyWorkRepository:
                 )
             )
             await self._session.commit()
+        if saved and owner_id != user_id:
+            await self._record_notification(owner_id, user_id, "save", work_id)
         return True
+
+    async def _record_notification(
+        self, recipient_id: UUID, actor_id: UUID, event_type: str, work_id: UUID
+    ) -> None:
+        await self._session.execute(
+            text(
+                """
+                insert into notifications(recipient_user_id, actor_user_id, event_type, work_id)
+                values (:recipient_id, :actor_id, :event_type, :work_id)
+                on conflict on constraint notifications_event_unique do update
+                set created_at = now(), read_at = null
+                """
+            ),
+            {"recipient_id": recipient_id, "actor_id": actor_id, "event_type": event_type, "work_id": work_id},
+        )
+        await self._session.commit()
 
     async def update_owned(
         self, work_id: UUID, owner_id: UUID, data: UpdateWorkRequest

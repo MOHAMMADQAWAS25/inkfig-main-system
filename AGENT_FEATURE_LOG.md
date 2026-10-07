@@ -2420,3 +2420,31 @@ Allow system administrators and administrators to delete any work only after ent
 ### Notes
 
 Storage deletion happens before the database transaction. If the later database operation fails, the storage object cannot be restored automatically, although the database transaction itself rolls back.
+
+## 2026-10-08 - Emit work interaction notifications
+
+### Request
+
+Notify work owners when another user likes or saves their post.
+
+### Changes
+
+- Emits persistent like/save notifications from the authoritative backend transactions.
+- Suppresses self-notifications and refreshes an existing deduplicated event when an interaction is repeated.
+- Work deletion cascades to its notification records through the shared schema.
+
+### API and database
+
+- No API contract changes and no migration in this repository.
+- Depends on user-system migration `20261008_015_create_notifications.sql`.
+
+### Verification
+
+- `[passed] git diff --check`
+- `[added] like/save notification regression test`
+- `[not run] pytest/mypy` - Python is unavailable locally; GitHub Actions will run both.
+
+### Deployment and Git
+
+- Deploy after `inkfig-user-system` and before `inkfig-user-FE`.
+- Branch: `feature/full-notifications`; commit/push pending final synchronization.
