@@ -1996,3 +1996,78 @@ No frontend changes. Original images continue to be displayed from Supabase Stor
 ### Notes
 
 The two requested files are available under `C:\Users\mohaamad\Downloads`. Live authenticated upload verification remains pending until browser control is available or the user uploads both files manually.
+
+## 2026-10-07 - Expose semantic search ranking
+
+### Request
+
+Return each semantic-search result's rank to the frontend so artworks are displayed from most to least similar.
+
+### Changes
+
+- Added a search-specific response contract containing a one-based `search_rank` and cosine `similarity_score` for every returned artwork.
+- Preserved database ordering by ascending cosine distance, then assigned ranks in that exact order.
+- Kept ordinary home, profile, liked, and saved feed response contracts unchanged.
+- Preserved the existing similarity threshold, category filter, active-owner scope, viewer-specific like/save state, and Voyage workflow.
+- Intentionally left the existing local `samconfig.toml` modification unchanged.
+
+### Repositories
+
+- `inkfig-main-system`: exposes explicit semantic rank and similarity metadata.
+- `inkfig-user-FE`: consumes rank metadata and renders search results in rank order.
+
+### Files
+
+- `src/entities/dto/works.py`: adds search-only artwork and feed response DTOs.
+- `src/entities/repositories/works.py`: updates the semantic-search repository contract.
+- `src/app/services/work_service.py`: returns the search-specific feed contract.
+- `src/infrastructure/repositories/work_repository.py`: selects cosine similarity and assigns deterministic one-based ranks.
+- `src/interface/api/routes/works.py`: publishes the search-specific response model.
+- `tests/test_query_indexes.py`: verifies similarity selection and rank assignment.
+- `tests/test_work_service.py`: verifies search ranking metadata validation.
+
+### API
+
+- `GET /api/v1/works/search`: each item now includes required `search_rank` and `similarity_score`; results remain ordered from highest to lowest similarity and weak results remain excluded by `VOYAGE_MIN_SIMILARITY`.
+- Request fields, category filtering, limits, public access, and 503 behavior are unchanged.
+
+### Database
+
+No migration required. Similarity and rank are calculated at query/request time from existing pgvector embeddings; no stored schema, indexes, constraints, defaults, foreign keys, or backfill behavior changed.
+
+### Permissions and scope
+
+- No permission is required for public semantic search.
+- Authenticated viewers continue receiving only their own like/save state.
+- Only published works owned by active accounts are eligible.
+- Authorization and data scope remain validated by the backend.
+
+### Frontend
+
+- The frontend receives `search_rank` and `similarity_score` and defensively sorts semantic results by ascending rank.
+- No visual rank label, route, navigation, layout, localization, loading, empty, responsive, or error-state changes were requested or added.
+
+### Verification
+
+- `[passed] uv run --with-requirements requirements.txt pytest -q - 29 passed`
+- `[passed] uv run --with-requirements requirements.txt mypy src tests - no issues in 48 source files`
+- `[passed] focused ruff check - all checks passed`
+- `[passed] git diff --check`
+- `[passed] frontend npm.cmd test - 44 passed`
+- `[passed] frontend npm.cmd run build - TypeScript and Vite production build succeeded`
+
+### Deployment
+
+- Deploy `inkfig-main-system`, then deploy `inkfig-user-FE`.
+- No migration must run before deployment.
+- No environment-variable, secret, or configuration changes are required.
+
+### Git
+
+- Branch: `main`
+- Commit: `328bcee`
+- Push: `successful`
+
+### Notes
+
+`similarity_score` is cosine similarity, not a probability or confidence percentage.
