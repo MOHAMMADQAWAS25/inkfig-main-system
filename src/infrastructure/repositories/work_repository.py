@@ -286,6 +286,7 @@ class SqlAlchemyWorkRepository:
         limit: int,
         type_code: str | None,
         min_similarity: float,
+        offset: int,
     ) -> list[WorkSearchResponse]:
         filters = ["w.status = 'published'"]
         parameters: dict[str, object] = {
@@ -293,6 +294,7 @@ class SqlAlchemyWorkRepository:
             "embedding": self._vector_literal(embedding),
             "limit": limit,
             "min_similarity": min_similarity,
+            "offset": offset,
         }
         if type_code is not None:
             filters.append("t.code = :type_code")
@@ -325,6 +327,7 @@ class SqlAlchemyWorkRepository:
                     group by w.work_id, p.full_name, t.type_id, e.embedding
                     order by e.embedding <=> cast(:embedding as extensions.vector), w.created_at desc
                     limit :limit
+                    offset :offset
                     """
                 ),
                 parameters,
@@ -350,7 +353,7 @@ class SqlAlchemyWorkRepository:
                 search_rank=rank,
                 similarity_score=float(r.similarity_score),
             )
-            for rank, r in enumerate(rows, start=1)
+            for rank, r in enumerate(rows, start=offset + 1)
         ]
 
     async def list_unembedded_paths(self, limit: int) -> list[tuple[UUID, str]]:

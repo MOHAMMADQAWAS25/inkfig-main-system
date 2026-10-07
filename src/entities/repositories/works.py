@@ -44,6 +44,7 @@ class WorkRepository(Protocol):
         limit: int,
         type_code: str | None,
         min_similarity: float,
+        offset: int,
     ) -> list[WorkSearchResponse]: ...
     async def list_unembedded_paths(self, limit: int) -> list[tuple[UUID, str]]: ...
 

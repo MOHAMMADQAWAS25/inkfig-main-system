@@ -53,9 +53,10 @@ async def search(
     query: str = Query(min_length=2, max_length=500),
     limit: int = Query(20, ge=1, le=50),
     type_code: str | None = Query(default=None, min_length=1, max_length=64),
+    cursor: int = Query(0, ge=0, le=10_000),
 ) -> WorkSearchFeedResponse:
     try:
-        return await service.search(query, viewer, limit, type_code)
+        return await service.search(query, viewer, limit, type_code, cursor)
     except WorkSearchUnavailableError as error:
         raise HTTPException(
             503, "Semantic artwork search is temporarily unavailable."

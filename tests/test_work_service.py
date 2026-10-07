@@ -34,6 +34,9 @@ class FakeWorkRepository:
         self.search_embedding: list[float] | None = None
         self.search_type_code: str | None = None
         self.search_min_similarity: float | None = None
+        self.search_offset: int | None = None
+        self.search_limit: int | None = None
+        self.search_results: list[WorkSearchResponse] = []
         self.unembedded: list[tuple[UUID, str]] = []
 
     async def list_types(self) -> list[WorkTypeResponse]:
@@ -100,12 +103,15 @@ class FakeWorkRepository:
         limit: int,
         type_code: str | None,
         min_similarity: float,
+        offset: int,
     ) -> list[WorkSearchResponse]:
-        del viewer_id, limit
+        del viewer_id
+        self.search_limit = limit
         self.search_embedding = embedding
         self.search_type_code = type_code
         self.search_min_similarity = min_similarity
-        return []
+        self.search_offset = offset
+        return self.search_results[:limit]
 
     async def list_unembedded_paths(self, limit: int) -> list[tuple[UUID, str]]:
         return self.unembedded[:limit]
@@ -307,6 +313,44 @@ async def test_search_normalizes_query_and_uses_multimodal_embedding() -> None:
     assert repository.search_embedding == [0.25, 0.75]
     assert repository.search_type_code == "photography"
     assert repository.search_min_similarity == 0.31
+    assert repository.search_offset == 0
+    assert repository.search_limit == 21
+    assert result.next_cursor is None
+
+
+@pytest.mark.asyncio
+async def test_search_returns_a_continuation_cursor_and_continuous_ranks() -> None:
+    repository = FakeWorkRepository()
+    repository.search_results = [
+        WorkSearchResponse(
+            work_id=uuid4(),
+            owner_user_id=uuid4(),
+            artist_name="InkFig artist",
+            type_id=uuid4(),
+            type_name_en="Photography",
+            type_name_ar="Photography",
+            title=f"Work {rank}",
+            description="",
+            links=[],
+            image_url=f"https://storage.test/{rank}.jpg",
+            mime_type="image/jpeg",
+            like_count=0,
+            created_at=datetime.now(timezone.utc),
+            search_rank=rank,
+            similarity_score=0.9 - (rank / 100),
+        )
+        for rank in range(21, 24)
+    ]
+    service = WorkService(
+        repository, FakeWorkStorage(), "works", FakeEmbeddingProvider()
+    )
+
+    result = await service.search("moon", None, 2, cursor=20)
+
+    assert [item.search_rank for item in result.items] == [21, 22]
+    assert result.next_cursor == 22
+    assert repository.search_limit == 3
+    assert repository.search_offset == 20
 
 
 def test_work_response_accepts_search_ranking_metadata() -> None:

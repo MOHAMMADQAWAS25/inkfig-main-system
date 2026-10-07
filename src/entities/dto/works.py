@@ -75,3 +75,4 @@ class WorkSearchResponse(WorkResponse):
 
 class WorkSearchFeedResponse(BaseModel):
     items: list[WorkSearchResponse]
+    next_cursor: int | None = Field(default=None, ge=0)

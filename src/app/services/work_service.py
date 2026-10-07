@@ -88,6 +88,7 @@ class WorkService:
         viewer_id: UUID | None,
         limit: int,
         type_code: str | None = None,
+        cursor: int = 0,
     ) -> WorkSearchFeedResponse:
         normalized = " ".join(query.split())
         if self._embedding_provider is None:
@@ -98,9 +99,10 @@ class WorkService:
         except Exception as error:
             raise WorkSearchUnavailableError from error
         items = await self._repository.search_published(
-            viewer_id, embedding, limit, type_code, self._min_similarity
+            viewer_id, embedding, limit + 1, type_code, self._min_similarity, cursor
         )
-        return WorkSearchFeedResponse(items=items)
+        next_cursor = cursor + limit if len(items) > limit else None
+        return WorkSearchFeedResponse(items=items[:limit], next_cursor=next_cursor)
 
     async def _backfill_missing_embeddings(self) -> None:
         if self._embedding_provider is None:
