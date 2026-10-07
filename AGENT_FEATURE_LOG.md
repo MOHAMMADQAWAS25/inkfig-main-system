@@ -2271,3 +2271,76 @@ Allow users to edit and delete only their own posts, prohibit image replacement 
 
 - Branch: `feature/owner-work-management`
 - Commit, rebase, push, merge, and main push: pending final synchronization.
+
+## 2026-10-07 - Repair previous artwork resets by deleting orphaned storage objects
+
+### Request
+
+Update the previous migrations that deleted all artworks so the corresponding files are also removed from Supabase Storage rather than deleting only database rows and links.
+
+### Changes
+
+- Added a tracked Python storage-migration mechanism alongside existing SQL migrations.
+- Added an idempotent cleanup that finds objects in the exact `works` bucket whose paths are no longer referenced by any current `works.storage_path`.
+- Deletes orphaned objects through the authenticated Supabase Storage API in bounded batches.
+- Validates the configured bucket, rejects unsafe paths, verifies no orphaned objects remain, and records the migration only after successful completion.
+- Deleted 13 orphaned artwork files left by the three earlier database-only reset migrations.
+- Preserved every storage object referenced by a current artwork row and left current artwork records unchanged.
+- Intentionally left the existing local `samconfig.toml` modification unchanged.
+
+### Repositories
+
+- `inkfig-main-system`: storage migration runner, orphan cleanup, verification tests, and applied cleanup.
+
+### Files
+
+- `migrations/run.py`: discovers ordered `*_storage.py` migrations, loads their async `apply` function, and records them in `schema_migrations` after success.
+- `migrations/20261007_010_delete_orphaned_work_storage.py`: validates and removes only unreferenced objects from the Supabase works bucket.
+- `tests/test_delete_existing_works_migration.py`: verifies discovery, database-reference exclusion, exact-bucket protection, API deletion, and post-delete verification.
+
+### API
+
+No API changes.
+
+### Database
+
+- Migration: `20261007_010_delete_orphaned_work_storage.py`
+- Reads `storage.objects` and `public.works.storage_path` to identify orphaned files, deletes exact paths through Supabase Storage, verifies zero remaining orphans, and records the filename in `public.schema_migrations`.
+- No schema, default, constraint, index, foreign-key, or application-row change is required.
+- No automatic rollback is possible for deleted binary objects; database-referenced current artwork files are excluded before deletion.
+
+### Permissions and scope
+
+- Requires backend-only `SUPABASE_SECRET_KEY`, `SUPABASE_URL`, `DATABASE_URL`, and exact `WORKS_BUCKET=works` configuration.
+- No end-user role or permission can invoke this migration through an API.
+- Scope is enforced by exact bucket validation, database reference exclusion, path validation, bounded batching, and post-delete verification.
+- Backend migration execution controls authorization; secrets remain server-side.
+
+### Frontend
+
+No frontend changes.
+
+### Verification
+
+- `[passed] uv run --with-requirements requirements.txt pytest -q - 33 passed`
+- `[passed] uv run --with-requirements requirements.txt mypy src tests migrations - no issues in 50 source files`
+- `[passed] focused ruff check - all changed migration and test files pass`
+- `[passed] uv run --env-file .env --with-requirements requirements.txt python -m migrations.run - deleted 13 orphaned objects and applied migration`
+- `[passed] migration post-check - works tables and public storage bucket verified`
+- `[passed] git diff --check`
+
+### Deployment
+
+- Deploy `inkfig-main-system` so future environments run Python storage migrations.
+- Migration `20261007_010_delete_orphaned_work_storage.py` must run with database and Supabase service credentials; it has already been applied to the configured Supabase project.
+- No new environment variables are required.
+
+### Git
+
+- Branch: `main`
+- Commit: `d61bf30`
+- Push: `successful`
+
+### Notes
+
+Future destructive artwork-reset migrations can use the tracked storage-migration mechanism. External file deletion is irreversible, so each cleanup must explicitly document scope and rollback limitations.
