@@ -7,15 +7,16 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from src.app.services.work_service import WorkService
 from src.entities.dto.works import (
     CreateWorkUploadRequest,
+    ModerateWorkDeletionRequest,
+    UpdateWorkRequest,
     WorkFeedResponse,
     WorkSearchFeedResponse,
     WorkTypeResponse,
     WorkUploadResponse,
-    UpdateWorkRequest,
 )
 from src.entities.exceptions.works import (
-    StorageUploadError,
     StorageDeleteError,
+    StorageUploadError,
     UnsupportedWorkFileError,
     WorkNotFoundError,
     WorkSearchUnavailableError,
@@ -108,6 +109,7 @@ async def user_works(
     before: datetime | None = None,
 ) -> WorkFeedResponse:
     return await service.public_profile_feed(user_id, viewer, limit, before)
+
 
 @router.post("/uploads", response_model=WorkUploadResponse, status_code=201)
 async def prepare_upload(
@@ -213,4 +215,23 @@ async def delete_work(
     except WorkNotFoundError as error:
         raise HTTPException(404, "Work not found.") from error
     except StorageDeleteError as error:
-        raise HTTPException(503, "Artwork storage could not be deleted safely.") from error
+        raise HTTPException(
+            503, "Artwork storage could not be deleted safely."
+        ) from error
+
+
+@router.delete("/{work_id}/moderation", status_code=204)
+async def delete_work_as_moderator(
+    work_id: UUID,
+    request: ModerateWorkDeletionRequest,
+    service: Annotated[WorkService, Depends(get_work_service)],
+    moderator: Annotated[UUID, Depends(require_permission("works.delete_any"))],
+) -> None:
+    try:
+        await service.delete_as_moderator(work_id, moderator, request)
+    except WorkNotFoundError as error:
+        raise HTTPException(404, "Work not found.") from error
+    except StorageDeleteError as error:
+        raise HTTPException(
+            503, "Artwork storage could not be deleted safely."
+        ) from error

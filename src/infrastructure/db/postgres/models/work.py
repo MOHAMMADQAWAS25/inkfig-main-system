@@ -85,3 +85,31 @@ class WorkLinkModel(Base):
     url: Mapped[str] = mapped_column(String(2083), nullable=False)
     label: Mapped[str | None] = mapped_column(String(120))
     position: Mapped[int] = mapped_column(nullable=False)
+
+
+class WorkDeletionAuditModel(Base):
+    __tablename__ = "work_deletion_audits"
+    audit_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True),
+        primary_key=True,
+        server_default=func.gen_random_uuid(),
+    )
+    work_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), nullable=False, index=True
+    )
+    owner_user_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), nullable=False, index=True
+    )
+    deleted_by_user_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), nullable=False, index=True
+    )
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    title: Mapped[str] = mapped_column(String(160), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    type_id: Mapped[UUID] = mapped_column(PostgresUUID(as_uuid=True), nullable=False)
+    storage_bucket: Mapped[str] = mapped_column(String(64), nullable=False)
+    storage_path: Mapped[str] = mapped_column(String(512), nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    deleted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
+    )

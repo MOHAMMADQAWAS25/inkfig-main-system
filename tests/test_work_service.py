@@ -7,6 +7,8 @@ from pydantic import HttpUrl, ValidationError
 from src.app.services.work_service import WorkService
 from src.entities.dto.works import (
     CreateWorkUploadRequest,
+    ModeratedWorkTarget,
+    ModerateWorkDeletionRequest,
     UpdateWorkRequest,
     WorkLinkRequest,
     WorkResponse,
@@ -43,6 +45,8 @@ class FakeWorkRepository:
         self.updated: UpdateWorkRequest | None = None
         self.owned_path: str | None = None
         self.deleted = False
+        self.moderation: tuple[ModeratedWorkTarget, UUID, str] | None = None
+        self.moderation_work: ModeratedWorkTarget | None = None
 
     async def list_types(self) -> list[WorkTypeResponse]:
         return []
@@ -109,6 +113,19 @@ class FakeWorkRepository:
     async def delete_owned(self, work_id: UUID, owner_id: UUID) -> bool:
         del work_id, owner_id
         self.deleted = True
+        return True
+
+    async def moderation_target(self, work_id: UUID) -> ModeratedWorkTarget | None:
+        return (
+            self.moderation_work
+            if self.moderation_work and self.moderation_work.work_id == work_id
+            else None
+        )
+
+    async def delete_moderated(
+        self, target: ModeratedWorkTarget, moderator_id: UUID, reason: str
+    ) -> bool:
+        self.moderation = (target, moderator_id, reason)
         return True
 
     async def save_embedding(
@@ -303,6 +320,8 @@ async def test_profile_likes_scope_uses_authenticated_user() -> None:
     assert result.items == []
     assert repository.listed_owner_id is None
     assert repository.listed_liked_by_id == user_id
+
+
 @pytest.mark.asyncio
 async def test_profile_saves_scope_uses_authenticated_user() -> None:
     repository = FakeWorkRepository()
@@ -381,6 +400,43 @@ async def test_delete_rejects_non_owner_without_touching_storage() -> None:
 
     assert storage.deleted_path is None
     assert repository.deleted is False
+
+
+@pytest.mark.asyncio
+async def test_moderator_delete_requires_reason_and_records_actor_before_database_delete() -> (
+    None
+):
+    repository = FakeWorkRepository()
+    work_id, owner_id, moderator_id, type_id = uuid4(), uuid4(), uuid4(), uuid4()
+    repository.moderation_work = ModeratedWorkTarget(
+        work_id=work_id,
+        owner_user_id=owner_id,
+        type_id=type_id,
+        title="Moderated work",
+        description="Policy violation",
+        storage_bucket="works",
+        storage_path=f"{owner_id}/{work_id}.png",
+        mime_type="image/png",
+    )
+    storage = FakeWorkStorage()
+    service = WorkService(repository, storage, "works")
+    request = ModerateWorkDeletionRequest(reason="  Violates   publication policy. ")
+
+    await service.delete_as_moderator(work_id, moderator_id, request)
+
+    assert storage.deleted_path == repository.moderation_work.storage_path
+    assert repository.moderation == (
+        repository.moderation_work,
+        moderator_id,
+        "Violates publication policy.",
+    )
+
+
+def test_moderator_deletion_reason_is_required_and_bounded() -> None:
+    with pytest.raises(ValidationError):
+        ModerateWorkDeletionRequest(reason="too short")
+    with pytest.raises(ValidationError):
+        ModerateWorkDeletionRequest(reason="x" * 1001)
 
 
 @pytest.mark.asyncio

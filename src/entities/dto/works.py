@@ -65,6 +65,29 @@ class UpdateWorkRequest(BaseModel):
         return self
 
 
+class ModerateWorkDeletionRequest(BaseModel):
+    reason: str = Field(min_length=10, max_length=1000)
+
+    @field_validator("reason")
+    @classmethod
+    def normalize_reason(cls, value: str) -> str:
+        normalized = " ".join(value.split())
+        if len(normalized) < 10:
+            raise ValueError("Deletion reason must contain at least 10 characters.")
+        return normalized
+
+
+class ModeratedWorkTarget(BaseModel):
+    work_id: UUID
+    owner_user_id: UUID
+    type_id: UUID
+    title: str
+    description: str
+    storage_bucket: str
+    storage_path: str
+    mime_type: str
+
+
 class WorkUploadResponse(BaseModel):
     work_id: UUID
     object_path: str

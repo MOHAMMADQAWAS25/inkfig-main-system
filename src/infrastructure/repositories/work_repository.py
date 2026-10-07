@@ -8,12 +8,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.entities.dto.works import (
     CreateWorkUploadRequest,
+    ModeratedWorkTarget,
     UpdateWorkRequest,
     WorkResponse,
     WorkSearchResponse,
     WorkTypeResponse,
 )
 from src.infrastructure.db.postgres.models.work import (
+    WorkDeletionAuditModel,
     WorkLikeModel,
     WorkLinkModel,
     WorkModel,
@@ -181,19 +183,17 @@ class SqlAlchemyWorkRepository:
             from works w
             join work_types t on t.type_id = w.type_id
             join user_accounts owner_account on owner_account.user_id = w.owner_user_id and owner_account.account_status = 'active'
-            {' '.join(profile_joins)}
+            {" ".join(profile_joins)}
             left join user_profiles p on p.user_id = w.owner_user_id
             left join work_likes l on l.work_id = w.work_id
               and exists (select 1 from user_accounts liker_account where liker_account.user_id = l.user_id and liker_account.account_status = 'active')
-            where {' and '.join(filters)}
+            where {" and ".join(filters)}
             group by w.work_id, p.full_name, t.type_id
             order by w.created_at desc, w.work_id desc
             limit :limit
             """
         )
-        rows = (
-            await self._session.execute(stmt, parameters)
-        ).mappings()
+        rows = (await self._session.execute(stmt, parameters)).mappings()
         return [
             WorkResponse(
                 work_id=r.work_id,
@@ -312,13 +312,63 @@ class SqlAlchemyWorkRepository:
 
     async def delete_owned(self, work_id: UUID, owner_id: UUID) -> bool:
         deleted_id = await self._session.scalar(
-            delete(WorkModel).where(
+            delete(WorkModel)
+            .where(
                 WorkModel.work_id == work_id,
                 WorkModel.owner_user_id == owner_id,
-            ).returning(WorkModel.work_id)
+            )
+            .returning(WorkModel.work_id)
         )
         await self._session.commit()
         return deleted_id is not None
+
+    async def moderation_target(self, work_id: UUID) -> ModeratedWorkTarget | None:
+        model = await self._session.scalar(
+            select(WorkModel).where(
+                WorkModel.work_id == work_id,
+                WorkModel.status == "published",
+            )
+        )
+        if model is None:
+            return None
+        return ModeratedWorkTarget(
+            work_id=model.work_id,
+            owner_user_id=model.owner_user_id,
+            type_id=model.type_id,
+            title=model.title,
+            description=model.description,
+            storage_bucket=model.storage_bucket,
+            storage_path=model.storage_path,
+            mime_type=model.mime_type,
+        )
+
+    async def delete_moderated(
+        self, target: ModeratedWorkTarget, moderator_id: UUID, reason: str
+    ) -> bool:
+        self._session.add(
+            WorkDeletionAuditModel(
+                work_id=target.work_id,
+                owner_user_id=target.owner_user_id,
+                deleted_by_user_id=moderator_id,
+                reason=reason,
+                title=target.title,
+                description=target.description,
+                type_id=target.type_id,
+                storage_bucket=target.storage_bucket,
+                storage_path=target.storage_path,
+                mime_type=target.mime_type,
+            )
+        )
+        deleted_id = await self._session.scalar(
+            delete(WorkModel)
+            .where(WorkModel.work_id == target.work_id)
+            .returning(WorkModel.work_id)
+        )
+        if deleted_id is None:
+            await self._session.rollback()
+            return False
+        await self._session.commit()
+        return True
 
     async def save_embedding(
         self, work_id: UUID, embedding: list[float], model_name: str
@@ -386,7 +436,7 @@ class SqlAlchemyWorkRepository:
                     left join user_profiles p on p.user_id = w.owner_user_id
                     left join work_likes l on l.work_id = w.work_id
                       and exists(select 1 from user_accounts la where la.user_id = l.user_id and la.account_status = 'active')
-                    where {' and '.join(filters)}
+                    where {" and ".join(filters)}
                       and (1 - (e.embedding <=> cast(:embedding as extensions.vector))) >= :min_similarity
                     group by w.work_id, p.full_name, t.type_id, e.embedding
                     order by e.embedding <=> cast(:embedding as extensions.vector), w.created_at desc

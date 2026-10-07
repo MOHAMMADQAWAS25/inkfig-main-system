@@ -6,11 +6,12 @@ from uuid import UUID, uuid4
 
 from src.entities.dto.works import (
     CreateWorkUploadRequest,
+    ModerateWorkDeletionRequest,
+    UpdateWorkRequest,
     WorkFeedResponse,
     WorkSearchFeedResponse,
     WorkTypeResponse,
     WorkUploadResponse,
-    UpdateWorkRequest,
 )
 from src.entities.exceptions.works import (
     UnsupportedWorkFileError,
@@ -79,7 +80,8 @@ class WorkService:
                 # Artwork publication must not depend on an external AI provider.
                 # Missing embeddings are safe to retry through the backfill workflow.
                 logging.getLogger(__name__).exception(
-                    "Artwork embedding failed during publication", extra={"work_id": str(work_id)}
+                    "Artwork embedding failed during publication",
+                    extra={"work_id": str(work_id)},
                 )
                 return
 
@@ -120,9 +122,7 @@ class WorkService:
 
         async def embed(work_id: UUID, path: str) -> tuple[UUID, list[float]] | None:
             try:
-                embedding = await provider.embed_image(
-                    self._storage.public_url(path)
-                )
+                embedding = await provider.embed_image(self._storage.public_url(path))
                 return work_id, embedding
             except Exception:
                 # A failed item remains eligible for a later bounded retry.
@@ -211,4 +211,16 @@ class WorkService:
             raise WorkNotFoundError
         await self._storage.delete_object(path)
         if not await self._repository.delete_owned(work_id, user_id):
+            raise WorkNotFoundError
+
+    async def delete_as_moderator(
+        self, work_id: UUID, moderator_id: UUID, request: ModerateWorkDeletionRequest
+    ) -> None:
+        target = await self._repository.moderation_target(work_id)
+        if target is None:
+            raise WorkNotFoundError
+        await self._storage.delete_object(target.storage_path)
+        if not await self._repository.delete_moderated(
+            target, moderator_id, request.reason
+        ):
             raise WorkNotFoundError
