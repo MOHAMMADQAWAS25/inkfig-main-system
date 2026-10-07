@@ -1,8 +1,19 @@
 import asyncio
+import importlib.util
 import os
 from pathlib import Path
+from types import ModuleType
 
 import asyncpg  # type: ignore[import-untyped]
+
+
+def load_storage_migration(path: Path) -> ModuleType:
+    spec = importlib.util.spec_from_file_location(f"inkfig_migration_{path.stem}", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Unable to load storage migration {path.name}.")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 async def run() -> None:
@@ -18,7 +29,12 @@ async def run() -> None:
             "filename text primary key, "
             "applied_at timestamptz not null default now())"
         )
-        for migration in sorted(Path(__file__).parent.glob("*.sql")):
+        migration_directory = Path(__file__).parent
+        migrations = sorted(
+            [*migration_directory.glob("*.sql"), *migration_directory.glob("*_storage.py")],
+            key=lambda migration: migration.name,
+        )
+        for migration in migrations:
             applied = await connection.fetchval(
                 "select exists(select 1 from public.schema_migrations where filename=$1)",
                 migration.name,
@@ -26,7 +42,15 @@ async def run() -> None:
             if applied:
                 continue
             async with connection.transaction():
-                await connection.execute(migration.read_text(encoding="utf-8"))
+                if migration.suffix == ".sql":
+                    await connection.execute(migration.read_text(encoding="utf-8"))
+                else:
+                    apply = getattr(load_storage_migration(migration), "apply", None)
+                    if apply is None:
+                        raise RuntimeError(
+                            f"Storage migration {migration.name} has no apply function."
+                        )
+                    await apply(connection)
                 await connection.execute(
                     "insert into public.schema_migrations(filename) values($1)",
                     migration.name,
