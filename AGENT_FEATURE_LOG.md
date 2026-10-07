@@ -2344,3 +2344,79 @@ No frontend changes.
 ### Notes
 
 Future destructive artwork-reset migrations can use the tracked storage-migration mechanism. External file deletion is irreversible, so each cleanup must explicitly document scope and rollback limitations.
+
+## 2026-10-07 - Add audited administrator work deletion
+
+### Request
+
+Allow system administrators and administrators to delete any work only after entering a deletion reason.
+
+### Changes
+
+- Added a moderation deletion workflow protected by `works.delete_any`.
+- Requires a normalized reason between 10 and 1000 characters.
+- Deletes the work's Supabase Storage object and its database record.
+- Persists an audit snapshot containing the work, owner, moderator, reason, storage metadata, and deletion time.
+- Left the existing owner-delete workflow unchanged.
+
+### Repositories
+
+- `inkfig-main-system`: implemented the endpoint, service, repository transaction, audit model, migration, and tests.
+- `inkfig-user-system`: added the administrator permission.
+- `inkfig-user-FE`: added the permission-gated deletion experience.
+
+### Files
+
+- `src/entities/dto/works.py`: added validated moderation request and target DTOs.
+- `src/entities/repositories/works.py`: added moderation repository operations.
+- `src/app/services/work_service.py`: added storage and database deletion orchestration.
+- `src/infrastructure/db/postgres/models/work.py`: added the deletion-audit model.
+- `src/infrastructure/repositories/work_repository.py`: snapshots, audits, and deletes the work transactionally.
+- `src/interface/api/routes/works.py`: added the protected moderation endpoint.
+- `migrations/20261007_011_create_work_deletion_audits.sql`: creates the audit table, indexes, and RLS policy.
+- `tests/test_work_service.py`: covers moderation deletion and reason validation.
+
+### API
+
+- `DELETE /api/v1/works/{work_id}/moderation`: requires `works.delete_any` and JSON body `{ "reason": string }`; reason must be 10–1000 normalized characters; returns 204, 404 when the published work does not exist, and 503 when storage deletion fails.
+
+### Database
+
+- Migration: `20261007_011_create_work_deletion_audits.sql`
+- Creates `work_deletion_audits` with UUID identifiers, moderator/owner/work snapshot fields, reason length constraint, deletion timestamp, and indexes for work, owner/time, and moderator/time lookup.
+- The audit intentionally has no foreign key to the deleted work so history survives deletion; rollback drops the audit table but cannot restore deleted files or works.
+
+### Permissions and scope
+
+- Required permission: `works.delete_any`.
+- Accessible only to `admin` and `system_administrator` through user-service permission claims.
+- The main backend validates the authenticated JWT and permission before loading or deleting a work.
+- The permission applies system-wide rather than only to works owned by the actor.
+
+### Frontend
+
+- The API supports the home and profile moderation controls implemented in `inkfig-user-FE`.
+
+### Verification
+
+- `[passed] uv run --with-requirements requirements.txt pytest -q` — 39 tests passed.
+- `[passed] uv run --with-requirements requirements.txt mypy src tests migrations`
+- `[passed] Ruff check and format check for all changed Python files`
+- `[passed] git diff --check`
+- `[passed] migration runner applied 20261007_011_create_work_deletion_audits.sql and verified work tables/storage bucket`
+
+### Deployment
+
+- Deploy `inkfig-main-system` after the user-service permission deployment.
+- Migration has already run against the configured Supabase database.
+- No environment-variable changes.
+
+### Git
+
+- Branch: `main`
+- Commit: `5e525a0`
+- Push: `successful`
+
+### Notes
+
+Storage deletion happens before the database transaction. If the later database operation fails, the storage object cannot be restored automatically, although the database transaction itself rolls back.
