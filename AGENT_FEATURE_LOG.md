@@ -2508,3 +2508,63 @@ No direct frontend changes in this repository.
 ### Notes
 
 Persistent notification creation remains authoritative even if realtime delivery is temporarily unavailable.
+
+## 2026-10-08 - Stop save notifications
+
+### Request
+
+Keep artwork saving behavior but stop notifying the work owner when another user saves it.
+
+### Changes
+
+- Removed notification creation and WebSocket delivery from the successful save workflow.
+- Preserved saving, unsaving, authorization, persistence, and existing historical notification compatibility.
+- Like and follow notifications remain unchanged.
+
+### Repositories
+
+- `inkfig-main-system`: removed the save-notification producer and updated regression coverage.
+
+### Files
+
+- `src/infrastructure/repositories/work_repository.py`: no longer records a notification after saving.
+- `tests/test_social_notifications.py`: verifies only likes use the work-interaction notification path.
+
+### API
+
+No API contract changes. Existing save endpoints retain their request and response behavior.
+
+### Database
+
+No migration required. Historical save notifications remain readable; no new ones are created.
+
+### Permissions and scope
+
+- Existing save permissions and backend authorization are unchanged.
+- Notification recipient scoping for remaining events remains backend-enforced.
+
+### Frontend
+
+No frontend changes. Saving still updates the work state normally.
+
+### Verification
+
+- `[passed] pytest -q` — 41 tests passed.
+- `[passed] mypy src tests`
+- `[passed] focused Ruff check and format check`
+- `[passed] git diff --check`
+
+### Deployment
+
+- Deploy `inkfig-main-system` through the existing GitHub Actions workflow.
+- No migration, secret, or environment-variable changes are required.
+
+### Git
+
+- Branch: `main`
+- Commit: `c0c8590`
+- Push: `successful`
+
+### Notes
+
+The database event-type constraint and frontend rendering retain `save` solely so old records remain compatible.
