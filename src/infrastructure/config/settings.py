@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     voyage_model: str = "voyage-multimodal-3.5"
     voyage_embedding_dimension: int = 1024
     voyage_min_similarity: float = 0.20
+    websocket_management_endpoint: str = ""
 
     model_config = SettingsConfigDict(
         env_file=".env",

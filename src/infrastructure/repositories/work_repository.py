@@ -22,6 +22,9 @@ from src.infrastructure.db.postgres.models.work import (
     WorkSaveModel,
     WorkTypeModel,
 )
+from src.infrastructure.integrations.notification_realtime import (
+    publish_notifications_changed,
+)
 from src.infrastructure.integrations.supabase_storage import SupabaseWorkStorage
 
 
@@ -277,9 +280,15 @@ class SqlAlchemyWorkRepository:
                 set created_at = now(), read_at = null
                 """
             ),
-            {"recipient_id": recipient_id, "actor_id": actor_id, "event_type": event_type, "work_id": work_id},
+            {
+                "recipient_id": recipient_id,
+                "actor_id": actor_id,
+                "event_type": event_type,
+                "work_id": work_id,
+            },
         )
         await self._session.commit()
+        await publish_notifications_changed(self._session, recipient_id)
 
     async def update_owned(
         self, work_id: UUID, owner_id: UUID, data: UpdateWorkRequest

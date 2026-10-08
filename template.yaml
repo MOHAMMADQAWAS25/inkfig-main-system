@@ -36,6 +36,9 @@ Parameters:
     Type: String
     Default: inkfig
     Description: Project tag used for AWS resource organization and cost allocation.
+  NotificationWebSocketApiId:
+    Type: String
+    Description: WebSocket API ID exported by inkfig-user-system.
 
 Globals:
   Function:
@@ -62,6 +65,7 @@ Globals:
         VOYAGE_MODEL: voyage-multimodal-3.5
         VOYAGE_EMBEDDING_DIMENSION: "1024"
         VOYAGE_MIN_SIMILARITY: "0.20"
+        WEBSOCKET_MANAGEMENT_ENDPOINT: !Sub "https://${NotificationWebSocketApiId}.execute-api.${AWS::Region}.amazonaws.com/production"
 
 Resources:
   HttpApi:
@@ -111,6 +115,9 @@ Resources:
               Action:
                 - secretsmanager:GetSecretValue
               Resource: !Sub "arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:inkfig/main/voyage-*"
+            - Effect: Allow
+              Action: execute-api:ManageConnections
+              Resource: !Sub "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${NotificationWebSocketApiId}/production/POST/@connections/*"
       Events:
         Root:
           Type: HttpApi

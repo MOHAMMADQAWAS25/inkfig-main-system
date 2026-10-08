@@ -84,6 +84,12 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           ACM_CERTIFICATE_ARN: ${{ secrets.ACM_CERTIFICATE_ARN }}
         run: |
+          NOTIFICATION_WEBSOCKET_API_ID="$(aws cloudformation describe-stacks --stack-name inkfig-user-system --region "$AWS_REGION" --query "Stacks[0].Outputs[?OutputKey=='NotificationWebSocketApiId'].OutputValue | [0]" --output text)"
+          if [ -z "$NOTIFICATION_WEBSOCKET_API_ID" ] || [ "$NOTIFICATION_WEBSOCKET_API_ID" = "None" ]; then
+            echo "The user-system WebSocket API is not deployed." >&2
+            exit 1
+          fi
+          export NOTIFICATION_WEBSOCKET_API_ID
           python - <<'PY'
           import json
           import os
@@ -98,6 +104,7 @@ jobs:
               "CertificateArn": os.environ["ACM_CERTIFICATE_ARN"],
               "JwtSecret": os.environ["JWT_SECRET"],
               "ProjectName": "inkfig",
+              "NotificationWebSocketApiId": os.environ["NOTIFICATION_WEBSOCKET_API_ID"],
           }
           path = Path(os.environ["RUNNER_TEMP"]) / "deploy-parameters.yaml"
           path.write_text(json.dumps(parameters), encoding="utf-8")
