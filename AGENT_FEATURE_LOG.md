@@ -2448,3 +2448,63 @@ Notify work owners when another user likes or saves their post.
 
 - Deploy after `inkfig-user-system` and before `inkfig-user-FE`.
 - Branch: `feature/full-notifications`; commit/push pending final synchronization.
+
+## 2026-10-08 - Publish work notifications live
+
+### Request
+
+Push like and save notification changes to connected recipients immediately.
+
+### Changes
+
+- Added best-effort API Gateway WebSocket publishing after persistent like/save notification creation.
+- Added stale connection cleanup and deployment discovery of the user-system WebSocket API.
+
+### Repositories
+
+- `inkfig-main-system`: publisher, IAM, deployment wiring, and tests.
+
+### Files
+
+- `src/infrastructure/integrations/notification_realtime.py`: publishes invalidations.
+- `src/infrastructure/repositories/work_repository.py`: triggers delivery after commit.
+- `template.yaml`: endpoint configuration and scoped IAM.
+- `.github/workflows/deploy.yml`: loads the shared API ID.
+
+### API
+
+No REST API changes. Sends WebSocket event `notifications.changed`.
+
+### Database
+
+No migration required; uses the shared connection table.
+
+### Permissions and scope
+
+- Delivery targets only connection IDs belonging to the work owner.
+- Lambda IAM is scoped to the shared production WebSocket connections.
+
+### Frontend
+
+No direct frontend changes in this repository.
+
+### Verification
+
+- `[passed] pytest -q` — 41 tests passed.
+- `[passed] mypy src tests`
+- `[passed] sam validate --lint`
+- `[incomplete] local sam build — dependency copy remained running`
+
+### Deployment
+
+- Deploy after `inkfig-user-system`; workflow resolves its WebSocket API output automatically.
+
+### Git
+
+- Branch: `main`
+- Commit: `c47411a`
+- Push: `successful`
+
+### Notes
+
+Persistent notification creation remains authoritative even if realtime delivery is temporarily unavailable.
