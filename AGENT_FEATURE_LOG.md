@@ -2568,3 +2568,75 @@ No frontend changes. Saving still updates the work state normally.
 ### Notes
 
 The database event-type constraint and frontend rendering retain `save` solely so old records remain compatible.
+
+## 2026-10-09 - Add public exact-artwork lookup
+
+### Request
+
+Allow a like notification to open the exact published artwork card instead of relying on the current home feed.
+
+### Changes
+
+- Added an exact published-artwork lookup through the work service and repository.
+- Reused the published-feed authorization and visibility rules, including active-owner filtering and optional viewer like/save state.
+- Returns not found for missing, deleted, unpublished, or otherwise invisible artwork.
+- Intentionally left feed, search, upload, moderation, and storage behavior unchanged.
+
+### Repositories
+
+- `inkfig-main-system`: adds exact public artwork retrieval.
+- `inkfig-user-system`: adds artwork titles to notification responses.
+- `inkfig-user-FE`: consumes this endpoint for notification deep links.
+
+### Files
+
+- `src/entities/repositories/works.py`: adds optional exact-work repository scope.
+- `src/infrastructure/repositories/work_repository.py`: filters the published query by work ID.
+- `src/app/services/work_service.py`: resolves one visible published artwork or raises not found.
+- `src/interface/api/routes/works.py`: exposes the exact-artwork route.
+- `tests/test_work_service.py`: verifies exact work scoping and missing-work behavior.
+
+### API
+
+- `GET /api/v1/works/{work_id}`: returns one published artwork; accepts optional viewer authentication for personalized interaction state; returns 404 when unavailable.
+
+### Database
+
+No migration required. The endpoint uses existing indexed artwork identifiers and existing visibility columns.
+
+### Permissions and scope
+
+- Public viewers may retrieve published artwork belonging to an active account.
+- Authenticated viewers additionally receive their existing like/save state.
+- Unpublished, deleted, and inactive-owner artwork is excluded by backend query rules.
+- Authorization and visibility are validated by the backend.
+
+### Frontend
+
+- Enables the frontend to open an artwork modal from a stable notification URL.
+- No main-system UI changes.
+
+### Verification
+
+- `[passed] uv run --with ruff ruff check src/entities/repositories/works.py src/infrastructure/repositories/work_repository.py src/app/services/work_service.py src/interface/api/routes/works.py tests/test_work_service.py`
+- `[passed] uv run --with ruff ruff format --check src/entities/repositories/works.py src/infrastructure/repositories/work_repository.py src/app/services/work_service.py src/interface/api/routes/works.py tests/test_work_service.py`
+- `[passed] uv run --with-requirements requirements.txt --with pytest --with pytest-asyncio pytest -q tests/test_work_service.py` — 25 passed
+- `[passed] uv run --with-requirements requirements.txt pytest -q` — 41 passed
+- `[passed] uv run --with-requirements requirements.txt mypy src` — 50 source files
+- `[passed] git diff --check`
+
+### Deployment
+
+- Deploy `inkfig-main-system`.
+- No migrations are required before deployment.
+- No environment-variable or configuration changes.
+
+### Git
+
+- Branch: `main`
+- Commit: `a5a440a`
+- Push: `successful`
+
+### Notes
+
+The practical clean-architecture guidance kept HTTP handling, application behavior, repository contracts, and SQL filtering in their respective layers.
