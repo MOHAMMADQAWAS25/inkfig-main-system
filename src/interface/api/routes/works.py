@@ -10,6 +10,7 @@ from src.entities.dto.works import (
     ModerateWorkDeletionRequest,
     UpdateWorkRequest,
     WorkFeedResponse,
+    WorkResponse,
     WorkSearchFeedResponse,
     WorkTypeResponse,
     WorkUploadResponse,
@@ -109,6 +110,18 @@ async def user_works(
     before: datetime | None = None,
 ) -> WorkFeedResponse:
     return await service.public_profile_feed(user_id, viewer, limit, before)
+
+
+@router.get("/{work_id}", response_model=WorkResponse)
+async def get_work(
+    work_id: UUID,
+    service: Annotated[WorkService, Depends(get_work_service)],
+    viewer: Annotated[UUID | None, Depends(get_optional_user)],
+) -> WorkResponse:
+    try:
+        return await service.get_published(work_id, viewer)
+    except WorkNotFoundError as error:
+        raise HTTPException(404, "The requested work was not found.") from error
 
 
 @router.post("/uploads", response_model=WorkUploadResponse, status_code=201)

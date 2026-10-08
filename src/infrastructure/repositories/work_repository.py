@@ -122,6 +122,7 @@ class SqlAlchemyWorkRepository:
         owner_id: UUID | None = None,
         liked_by_id: UUID | None = None,
         saved_by_id: UUID | None = None,
+        work_id: UUID | None = None,
     ) -> list[WorkResponse]:
         profile_joins: list[str] = []
         filters = ["w.status = 'published'"]
@@ -136,6 +137,9 @@ class SqlAlchemyWorkRepository:
         if owner_id is not None:
             filters.append("w.owner_user_id = :owner_id")
             parameters["owner_id"] = owner_id
+        if work_id is not None:
+            filters.append("w.work_id = :work_id")
+            parameters["work_id"] = work_id
         if liked_by_id is not None:
             profile_joins.append(
                 "join work_likes profile_like "

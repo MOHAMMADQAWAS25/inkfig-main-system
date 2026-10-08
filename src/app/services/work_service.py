@@ -9,6 +9,7 @@ from src.entities.dto.works import (
     ModerateWorkDeletionRequest,
     UpdateWorkRequest,
     WorkFeedResponse,
+    WorkResponse,
     WorkSearchFeedResponse,
     WorkTypeResponse,
     WorkUploadResponse,
@@ -153,6 +154,16 @@ class WorkService:
         )
         next_cursor = items[limit - 1].created_at if len(items) > limit else None
         return WorkFeedResponse(items=items[:limit], next_cursor=next_cursor)
+
+    async def get_published(
+        self, work_id: UUID, viewer_id: UUID | None
+    ) -> WorkResponse:
+        items = await self._repository.list_published(
+            viewer_id, 1, None, None, work_id=work_id
+        )
+        if not items:
+            raise WorkNotFoundError
+        return items[0]
 
     async def profile_feed(
         self,

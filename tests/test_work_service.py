@@ -32,6 +32,7 @@ class FakeWorkRepository:
         self.listed_owner_id: UUID | None = None
         self.listed_liked_by_id: UUID | None = None
         self.listed_saved_by_id: UUID | None = None
+        self.listed_work_id: UUID | None = None
         self.saved: bool | None = None
         self.embedding: list[float] | None = None
         self.search_embedding: list[float] | None = None
@@ -81,6 +82,7 @@ class FakeWorkRepository:
         owner_id: UUID | None = None,
         liked_by_id: UUID | None = None,
         saved_by_id: UUID | None = None,
+        work_id: UUID | None = None,
     ) -> list[WorkResponse]:
         del limit, before
         self.listed_viewer_id = viewer_id
@@ -88,6 +90,7 @@ class FakeWorkRepository:
         self.listed_owner_id = owner_id
         self.listed_liked_by_id = liked_by_id
         self.listed_saved_by_id = saved_by_id
+        self.listed_work_id = work_id
         return []
 
     async def set_like(self, work_id: UUID, user_id: UUID, liked: bool) -> bool:
@@ -267,6 +270,18 @@ async def test_empty_public_feed_has_no_cursor() -> None:
 
     assert result.items == []
     assert result.next_cursor is None
+
+
+@pytest.mark.asyncio
+async def test_get_published_scopes_lookup_to_exact_work() -> None:
+    repository = FakeWorkRepository()
+    service = WorkService(repository, FakeWorkStorage(), "works")
+    work_id = uuid4()
+
+    with pytest.raises(WorkNotFoundError):
+        await service.get_published(work_id, None)
+
+    assert repository.listed_work_id == work_id
 
 
 @pytest.mark.asyncio
