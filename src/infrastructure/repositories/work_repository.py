@@ -264,8 +264,6 @@ class SqlAlchemyWorkRepository:
                 )
             )
             await self._session.commit()
-        if saved and owner_id != user_id:
-            await self._record_notification(owner_id, user_id, "save", work_id)
         return True
 
     async def _record_notification(

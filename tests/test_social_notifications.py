@@ -1,7 +1,7 @@
 from pathlib import Path
 
 
-def test_like_and_save_create_owner_notifications() -> None:
+def test_only_like_creates_an_owner_notification() -> None:
     source = (
         Path(__file__).resolve().parents[1]
         / "src"
@@ -10,10 +10,13 @@ def test_like_and_save_create_owner_notifications() -> None:
         / "work_repository.py"
     ).read_text(encoding="utf-8")
     assert '"like"' in source
-    assert '"save"' in source
     assert "insert into notifications" in source
     assert "owner_id != user_id" in source
     assert "publish_notifications_changed" in source
+    set_save = source.split("async def set_save", 1)[1].split(
+        "async def _record_notification", 1
+    )[0]
+    assert "_record_notification" not in set_save
 
 
 def test_main_stack_can_publish_to_shared_websocket_api() -> None:
