@@ -10,7 +10,8 @@ from src.entities.exceptions.works import StorageUploadError, UnsupportedWorkFil
 from src.entities.repositories.works import WorkStorage
 
 VARIANT_WIDTHS = (236, 474, 736, 1080)
-MAX_IMAGE_PIXELS = 25_000_000
+MAX_IMAGE_PIXELS = 80_000_000
+MAX_DECODED_PIXELS = 25_000_000
 
 
 def render_image(data: bytes) -> tuple[int, int, str, list[tuple[int, bytes]]]:
@@ -23,11 +24,22 @@ def render_image(data: bytes) -> tuple[int, int, str, list[tuple[int, bytes]]]:
                     raise UnsupportedWorkFileError
                 if original.width * original.height > MAX_IMAGE_PIXELS:
                     raise UnsupportedWorkFileError
+                width, height = original.size
+                if original.getexif().get(274) in {5, 6, 7, 8}:
+                    width, height = height, width
                 animated = getattr(original, "is_animated", False)
+                # JPEG decoder subsampling avoids allocating the full high-resolution
+                # canvas while retaining original dimensions in the media contract.
+                original.draft("RGB", (1080, 1080))
+                if original.width * original.height > MAX_DECODED_PIXELS:
+                    raise UnsupportedWorkFileError
                 image = ImageOps.exif_transpose(original).convert("RGBA")
-                width, height = image.size
-                background = Image.new("RGB", image.size, "#eeeedc")
-                background.paste(image, mask=image.getchannel("A"))
+                sample = image.resize(
+                    (min(128, image.width), min(128, image.height)),
+                    Image.Resampling.BOX,
+                )
+                background = Image.new("RGB", sample.size, "#eeeedc")
+                background.paste(sample, mask=sample.getchannel("A"))
                 rgb = background.resize((1, 1)).getpixel((0, 0))
                 assert isinstance(rgb, tuple)
                 color = "#{:02x}{:02x}{:02x}".format(*rgb)

@@ -58,7 +58,10 @@ Cards, details, profile responses and search responses include optional `media`:
 `{url,width,height,dominantColor,sizes:[{w,url}]}`. Dimensions are EXIF-normalized.
 Publication validates actual image content and persists this metadata before
 publishing, offloading Pillow CPU work to a request-time thread. Downloads are
-capped at 10MiB and decoded images at 25 million pixels. Invalid images return
+capped at 10MiB and image headers at 80 million pixels, with a 25-million-pixel
+decoded-canvas bound. JPEG decoder subsampling supports large originals without
+allocating their full canvas; stored dimensions still describe the original.
+Invalid images return
 422; preparation/storage failures return 503 and may be retried while still draft.
 Existing permissions and ownership checks remain unchanged.
 

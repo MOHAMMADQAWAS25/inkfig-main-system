@@ -2693,3 +2693,12 @@ retryable. Semantic search retains its existing ranked numeric pagination; profi
 feeds retain their existing endpoint. Physical-phone FPS and field CLS targets are
 not certified by these checks. Push directly to main after pull/rebase under the
 standing workflow; no user-system changes or deployment required.
+
+## 2026-10-11 - Support large existing JPEGs during media backfill
+
+- Production verification found a valid existing 7000x4667 JPEG (4.7MB) exceeded the initial 25-million-pixel header bound; 29 other public artworks were prepared successfully. Backend deployment itself succeeded; the backfill correctly reported failure rather than skipping it silently.
+- Added JPEG decoder subsampling before rendering, retaining original EXIF-normalized dimensions while bounding the decoded working canvas at 25 million pixels. Header limit is now 80 million pixels, below Pillow's default bomb-warning threshold. Non-subsampled formats still enforce the decoded bound.
+- Color sampling uses a small thumbnail instead of a full-size second RGB canvas, reducing request-time memory. No original image, user record, permission, API shape or environment configuration is changed.
+- Updated image-processing regression tests (large JPEG and EXIF rotation), documentation, and removed a terminal blank line from the additive migration.
+- Verification: 67 backend tests passed, with clean type/lint checks; the resumable backfill retries only missing metadata on the next normal main deployment.
+- Deployment: main-system follow-up, then frontend after backfill success. Processing still runs at request/execution time for future SnapStart compatibility.

@@ -33,6 +33,29 @@ def test_small_image_is_never_upscaled() -> None:
     assert [w for w, _ in render_image(png(100, 50))[3]] == [100]
 
 
+def test_large_jpeg_uses_decoder_subsampling_without_changing_original_dimensions() -> (
+    None
+):
+    output = BytesIO()
+    with Image.new("RGB", (7000, 4667), "red") as image:
+        image.save(output, "JPEG")
+    width, height, _, variants = render_image(output.getvalue())
+    assert (width, height) == (7000, 4667)
+    assert [w for w, _ in variants] == [236, 474, 736, 1080]
+
+
+def test_exif_rotation_reports_display_dimensions() -> None:
+    output = BytesIO()
+    image = Image.new("RGB", (800, 400), "red")
+    exif = image.getexif()
+    exif[274] = 6
+    image.save(output, "JPEG", exif=exif)
+    width, height, _, variants = render_image(output.getvalue())
+    assert (width, height) == (400, 800)
+    with Image.open(BytesIO(variants[0][1])) as resized:
+        assert resized.height == resized.width * 2
+
+
 def test_animation_uses_original_not_static_variants() -> None:
     output = BytesIO()
     first = Image.new("RGB", (40, 60), "red")
