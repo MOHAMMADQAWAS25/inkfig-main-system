@@ -1,10 +1,11 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 import pytest
 from pydantic import HttpUrl, ValidationError
 
 from src.app.services.work_service import WorkService
+from src.entities.dto.feed import FeedCardResponse, FeedPosition
 from src.entities.dto.works import (
     CreateWorkUploadRequest,
     ModeratedWorkTarget,
@@ -23,6 +24,16 @@ from src.entities.exceptions.works import (
 
 
 class FakeWorkRepository:
+    async def list_feed_cards(
+        self,
+        viewer_id: UUID | None,
+        limit: int,
+        before: FeedPosition | None,
+        type_code: str | None,
+        owner_id: UUID | None,
+    ) -> list[FeedCardResponse]:
+        return []
+
     def __init__(self) -> None:
         self.created: tuple[UUID, UUID, str] | None = None
         self.path: str | None = None
@@ -266,7 +277,7 @@ async def test_publish_requires_uploaded_object() -> None:
 async def test_empty_public_feed_has_no_cursor() -> None:
     service = WorkService(FakeWorkRepository(), FakeWorkStorage(), "works")
 
-    result = await service.feed(None, 20, datetime.now(timezone.utc))
+    result = await service.feed(None, 20, datetime.now(UTC))
 
     assert result.items == []
     assert result.next_cursor is None
@@ -513,7 +524,7 @@ async def test_search_returns_a_continuation_cursor_and_continuous_ranks() -> No
             image_url=f"https://storage.test/{rank}.jpg",
             mime_type="image/jpeg",
             like_count=0,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
             search_rank=rank,
             similarity_score=0.9 - (rank / 100),
         )
@@ -545,7 +556,7 @@ def test_work_response_accepts_search_ranking_metadata() -> None:
         image_url="https://storage.test/moon.jpg",
         mime_type="image/jpeg",
         like_count=0,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
         search_rank=1,
         similarity_score=0.91,
     )
@@ -587,3 +598,137 @@ async def test_publish_succeeds_when_embedding_provider_is_temporarily_down() ->
 
     assert repository.published is True
     assert repository.embedding is None
+
+
+class PaginatedFeedRepository(FakeWorkRepository):
+    def __init__(self, items: list[FeedCardResponse]) -> None:
+        super().__init__()
+        self.items = items
+        self.feed_calls = 0
+
+    async def list_feed_cards(
+        self,
+        viewer_id: UUID | None,
+        limit: int,
+        before: FeedPosition | None,
+        type_code: str | None,
+        owner_id: UUID | None,
+    ) -> list[FeedCardResponse]:
+        self.feed_calls += 1
+        self.listed_viewer_id = viewer_id
+        self.listed_type_code = type_code
+        self.listed_owner_id = owner_id
+        items = sorted(
+            self.items, key=lambda item: (item.created_at, item.work_id), reverse=True
+        )
+        if before is not None:
+            items = [
+                item
+                for item in items
+                if (item.created_at, item.work_id) < (before.created_at, before.work_id)
+            ]
+        return items[:limit]
+
+
+def feed_card(number: int) -> FeedCardResponse:
+    return FeedCardResponse(
+        work_id=UUID(int=number),
+        owner_user_id=UUID(int=100),
+        artist_name="Artist",
+        type_id=UUID(int=200),
+        type_name_en="Art",
+        type_name_ar="Art",
+        title=f"Work {number}",
+        image_url=f"https://storage.test/{number}.png",
+        mime_type="image/png",
+        like_count=0,
+        liked_by_me=False,
+        saved_by_me=False,
+        created_at=datetime(2026, 10, 11, tzinfo=UTC),
+    )
+
+
+@pytest.mark.asyncio
+async def test_infinite_feed_has_no_gaps_with_identical_timestamps_and_new_insert() -> (
+    None
+):
+    repository = PaginatedFeedRepository([feed_card(i) for i in range(1, 8)])
+    service = WorkService(repository, FakeWorkStorage(), "works")
+    first = await service.infinite_feed(None, 2)
+    assert [item.work_id.int for item in first.items] == [7, 6]
+    assert first.has_next_page and first.next_cursor
+    repository.items.append(feed_card(8))
+    ids = [item.work_id for item in first.items]
+    cursor: str | None = first.next_cursor
+    while cursor:
+        page = await service.infinite_feed(None, 2, cursor)
+        ids.extend(item.work_id for item in page.items)
+        assert page.has_next_page == (page.next_cursor is not None)
+        cursor = page.next_cursor
+    assert [item.int for item in ids] == list(range(7, 0, -1))
+    assert len(ids) == len(set(ids))
+
+
+@pytest.mark.asyncio
+async def test_infinite_feed_continues_after_cursor_item_is_deleted() -> None:
+    repository = PaginatedFeedRepository([feed_card(i) for i in range(1, 6)])
+    service = WorkService(repository, FakeWorkStorage(), "works")
+    first = await service.infinite_feed(None, 2)
+    repository.items = [item for item in repository.items if item.work_id.int != 4]
+    next_page = await service.infinite_feed(None, 3, first.next_cursor)
+    assert [item.work_id.int for item in next_page.items] == [3, 2, 1]
+    assert not next_page.has_next_page
+    assert next_page.next_cursor is None
+
+
+@pytest.mark.asyncio
+async def test_infinite_feed_scopes_cursor_and_preserves_viewer() -> None:
+    from src.app.services.feed_cursor import InvalidFeedCursorError
+
+    repository = PaginatedFeedRepository([feed_card(i) for i in range(1, 4)])
+    service = WorkService(repository, FakeWorkStorage(), "works")
+    viewer, owner = uuid4(), uuid4()
+    first = await service.infinite_feed(
+        viewer, 1, type_code="digital-art", owner_id=owner
+    )
+    assert repository.listed_viewer_id == viewer
+    assert repository.listed_owner_id == owner
+    assert repository.listed_type_code == "digital-art"
+    with pytest.raises(InvalidFeedCursorError):
+        await service.infinite_feed(viewer, 1, first.next_cursor, "video", owner)
+    assert repository.feed_calls == 1
+
+
+def test_infinite_feed_http_contract_and_invalid_requests() -> None:
+    from fastapi.testclient import TestClient
+
+    from src.interface.dependencies.authentication import get_optional_user
+    from src.interface.dependencies.works import get_work_service
+    from src.main import create_app
+
+    repository = PaginatedFeedRepository([feed_card(1), feed_card(2)])
+    service = WorkService(repository, FakeWorkStorage(), "works")
+    app = create_app()
+    app.dependency_overrides[get_optional_user] = lambda: None
+    app.dependency_overrides[get_work_service] = lambda: service
+    client = TestClient(app)
+    first = client.get("/api/v1/feed", params={"limit": 1})
+    assert first.status_code == 200
+    assert first.headers["cache-control"] == "private, no-store"
+    assert first.headers["vary"] == "Cookie, Authorization"
+    payload = first.json()
+    assert payload["hasNextPage"] is True
+    assert payload["nextCursor"]
+    assert "description" not in payload["items"][0]
+    assert "links" not in payload["items"][0]
+    last = client.get(
+        "/api/v1/feed", params={"limit": 1, "cursor": payload["nextCursor"]}
+    )
+    assert last.status_code == 200
+    assert last.json()["hasNextPage"] is False
+    assert last.json()["nextCursor"] is None
+    for cursor in ["", "%%%", "x" * 513, "null", "é"]:
+        assert client.get("/api/v1/feed", params={"cursor": cursor}).status_code == 400
+    invalid_limits: list[int | str] = [0, 51, -1, "abc"]
+    for limit in invalid_limits:
+        assert client.get("/api/v1/feed", params={"limit": limit}).status_code == 422

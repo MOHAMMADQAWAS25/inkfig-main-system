@@ -4,6 +4,12 @@ from datetime import datetime
 from typing import ClassVar
 from uuid import UUID, uuid4
 
+from src.app.services.feed_cursor import (
+    decode_feed_cursor,
+    encode_feed_cursor,
+    feed_scope,
+)
+from src.entities.dto.feed import FeedPosition, InfiniteFeedResponse
 from src.entities.dto.works import (
     CreateWorkUploadRequest,
     ModerateWorkDeletionRequest,
@@ -48,6 +54,33 @@ class WorkService:
 
     async def list_types(self) -> list[WorkTypeResponse]:
         return await self._repository.list_types()
+
+    async def infinite_feed(
+        self,
+        viewer_id: UUID | None,
+        limit: int = 20,
+        cursor: str | None = None,
+        type_code: str | None = None,
+        owner_id: UUID | None = None,
+    ) -> InfiniteFeedResponse:
+        if not 1 <= limit <= 50:
+            raise ValueError("Feed limit must be between 1 and 50.")
+        scope = feed_scope(type_code, owner_id)
+        before = decode_feed_cursor(cursor, scope) if cursor is not None else None
+        rows = await self._repository.list_feed_cards(
+            viewer_id, limit + 1, before, type_code, owner_id
+        )
+        items = rows[:limit]
+        has_next_page = len(rows) > limit
+        next_cursor = None
+        if has_next_page:
+            last = items[-1]
+            next_cursor = encode_feed_cursor(
+                FeedPosition(last.created_at, last.work_id), scope
+            )
+        return InfiniteFeedResponse(
+            items=items, next_cursor=next_cursor, has_next_page=has_next_page
+        )
 
     async def prepare_upload(
         self, user_id: UUID, data: CreateWorkUploadRequest

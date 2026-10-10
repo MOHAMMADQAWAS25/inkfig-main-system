@@ -1,11 +1,12 @@
 import math
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import delete, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.entities.dto.feed import FeedCardResponse, FeedPosition
 from src.entities.dto.works import (
     CreateWorkUploadRequest,
     ModeratedWorkTarget,
@@ -31,6 +32,59 @@ from src.infrastructure.integrations.supabase_storage import SupabaseWorkStorage
 class SqlAlchemyWorkRepository:
     def __init__(self, session: AsyncSession, storage: SupabaseWorkStorage) -> None:
         self._session, self._storage = session, storage
+
+    async def list_feed_cards(
+        self,
+        viewer_id: UUID | None,
+        limit: int,
+        before: FeedPosition | None,
+        type_code: str | None,
+        owner_id: UUID | None,
+    ) -> list[FeedCardResponse]:
+        filters = ["w.status = 'published'", "a.account_status = 'active'"]
+        parameters: dict[str, object] = {"viewer": viewer_id, "limit": limit}
+        if before is not None:
+            filters.append("(w.created_at, w.work_id) < (:created_at, :work_id)")
+            parameters.update(created_at=before.created_at, work_id=before.work_id)
+        if type_code is not None:
+            filters.append("t.code = :type_code")
+            parameters["type_code"] = type_code
+        if owner_id is not None:
+            filters.append("w.owner_user_id = :owner_id")
+            parameters["owner_id"] = owner_id
+        # Select a bounded page first; interaction counts only touch its artworks.
+        statement = text(f"""
+            with page as (
+                select w.work_id, w.owner_user_id, w.type_id, w.title,
+                       w.storage_path, w.mime_type, w.created_at,
+                       t.name_en as type_name_en, t.name_ar as type_name_ar
+                from works w
+                join work_types t on t.type_id = w.type_id
+                join user_accounts a on a.user_id = w.owner_user_id
+                where {" and ".join(filters)}
+                order by w.created_at desc, w.work_id desc
+                limit :limit
+            )
+            select page.*,
+                   coalesce(p.full_name, 'InkFig artist') as artist_name,
+                   (select count(*) from work_likes l
+                    join user_accounts la on la.user_id = l.user_id
+                    where l.work_id = page.work_id and la.account_status = 'active') as like_count,
+                   exists (select 1 from work_likes l where l.work_id = page.work_id
+                           and l.user_id = cast(:viewer as uuid)) as liked_by_me,
+                   exists (select 1 from work_saves s where s.work_id = page.work_id
+                           and s.user_id = cast(:viewer as uuid)) as saved_by_me
+            from page left join user_profiles p on p.user_id = page.owner_user_id
+            order by page.created_at desc, page.work_id desc
+        """)
+        rows = (await self._session.execute(statement, parameters)).mappings()
+        return [
+            FeedCardResponse(
+                **{key: value for key, value in row.items() if key != "storage_path"},
+                image_url=self._storage.public_url(row.storage_path),
+            )
+            for row in rows
+        ]
 
     async def list_types(self) -> list[WorkTypeResponse]:
         rows = (
@@ -100,7 +154,7 @@ class SqlAlchemyWorkRepository:
         )
         if model is None:
             return False
-        model.status, model.published_at = "published", datetime.now(timezone.utc)
+        model.status, model.published_at = "published", datetime.now(UTC)
         await self._session.commit()
         return True
 

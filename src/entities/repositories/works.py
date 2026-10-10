@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Protocol
 from uuid import UUID
 
+from src.entities.dto.feed import FeedCardResponse, FeedPosition
 from src.entities.dto.works import (
     CreateWorkUploadRequest,
     ModeratedWorkTarget,
@@ -13,6 +14,14 @@ from src.entities.dto.works import (
 
 
 class WorkRepository(Protocol):
+    async def list_feed_cards(
+        self,
+        viewer_id: UUID | None,
+        limit: int,
+        before: FeedPosition | None,
+        type_code: str | None,
+        owner_id: UUID | None,
+    ) -> list[FeedCardResponse]: ...
     async def list_types(self) -> list[WorkTypeResponse]: ...
     async def create_draft(
         self,

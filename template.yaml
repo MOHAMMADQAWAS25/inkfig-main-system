@@ -73,6 +73,10 @@ Resources:
     Properties:
       Name: !Sub "${AWS::StackName}-http-api"
       StageName: $default
+      RouteSettings:
+        "GET /api/v1/feed":
+          ThrottlingBurstLimit: 40
+          ThrottlingRateLimit: 20
       Tags:
         Project: !Ref ProjectName
         Service: main-system
@@ -119,6 +123,12 @@ Resources:
               Action: execute-api:ManageConnections
               Resource: !Sub "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${NotificationWebSocketApiId}/production/POST/@connections/*"
       Events:
+        Feed:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /api/v1/feed
+            Method: GET
         Root:
           Type: HttpApi
           Properties:

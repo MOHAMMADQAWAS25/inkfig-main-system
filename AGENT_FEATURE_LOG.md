@@ -2640,3 +2640,15 @@ No migration required. The endpoint uses existing indexed artwork identifiers an
 ### Notes
 
 The practical clean-architecture guidance kept HTTP handling, application behavior, repository contracts, and SQL filtering in their respective layers.
+
+# 2026-10-11 — Infinite image feed, review stage 1
+
+- Added backward-compatible `GET /api/v1/feed` with lightweight cards and `{items, nextCursor, hasNextPage}`; default 20, maximum 50.
+- Versioned filter-scoped cursors use `(created_at, work_id)` keyset ordering, preventing skipped equal-timestamp posts and supporting deleted cursor posts.
+- Existing published/active-owner visibility, optional viewer like/save state, category and artist filters remain enforced. Personalized responses prohibit shared caching.
+- Added route-specific API Gateway throttling: 20 requests/second, burst 40 (shared, not per user).
+- Reused existing composite indexes; no migration or environment changes. Resources remain request-scoped for future SnapStart compatibility.
+- Files: new feed DTO, cursor codec, route, tests, and `docs/infinite-feed.md`; extended repository/service contracts, SQL implementation, router registration and SAM template.
+- Verification: 57 tests passed; mypy passed for 55 source files; targeted Ruff checks passed; SAM template validation with lint passed.
+- Image-only scope confirmed. This is the first requested review point: existing frontend/masonry is unchanged. Hook/list, media metadata/variants, stable masonry positioning, virtualization, and integrated UI tests remain for subsequent stages.
+- Deployment: normal main-system GitHub Actions deployment; no frontend/user-system deployment needed.
