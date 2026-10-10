@@ -6,6 +6,7 @@ from pydantic import HttpUrl, ValidationError
 
 from src.app.services.work_service import WorkService
 from src.entities.dto.feed import FeedCardResponse, FeedPosition
+from src.entities.dto.media import ImageMedia
 from src.entities.dto.works import (
     CreateWorkUploadRequest,
     ModeratedWorkTarget,
@@ -24,6 +25,9 @@ from src.entities.exceptions.works import (
 
 
 class FakeWorkRepository:
+    async def save_media(self, work_id: UUID, media: ImageMedia) -> None:
+        self.media = media
+
     async def list_feed_cards(
         self,
         viewer_id: UUID | None,
@@ -172,6 +176,12 @@ class FakeWorkRepository:
 
 
 class FakeWorkStorage:
+    async def download_image(self, path: str) -> bytes:
+        return b""
+
+    async def upload_variant(self, path: str, data: bytes) -> None:
+        pass
+
     def __init__(self, exists: bool = True) -> None:
         self.exists = exists
         self.deleted_path: str | None = None

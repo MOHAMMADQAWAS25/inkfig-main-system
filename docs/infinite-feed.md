@@ -1,8 +1,8 @@
 # Infinite artwork feed: staged implementation
 
 Stage 1 adds a new chronological card endpoint without changing the existing
-`/works` or semantic-search response contracts. The frontend still uses those
-older endpoints until its separately reviewed integration stage.
+`/works` or semantic-search pagination contracts. The main gallery now uses this
+endpoint; ranked search and profile galleries retain their existing endpoints.
 
 ## API
 
@@ -46,21 +46,40 @@ No clients, sockets, timestamps, or credentials are captured during module impor
 Cursor decoding and repository operations run at request time for compatibility
 with future AWS Lambda SnapStart adoption.
 
-## Remaining review stages
+## Implemented image media and frontend stages
 
-2. Reusable abortable infinite-feed hook, retries, scroll preservation, and list
-   layout; keep masonry as the system's default presentation.
-3. Persist image dimensions, placeholders, and resized variants at publication;
-   backfill existing works, then consume those fields with lazy responsive images.
-   Preserve GIF animation and natural image proportions.
-4. Precompute shortest-column masonry positions and preserve existing positions
-   while appending, including RTL, resize, and device rotation.
-5. Virtualize off-screen cards while retaining total scroll height.
-6. Add behavior/performance coverage for the integrated hook, masonry, and media.
+The frontend now integrates a cancellable TanStack infinite-query hook, retry,
+list/masonry presentation, shortest-column placement, responsive lazy images,
+bounded DOM virtualization, and navigation restoration. See its
+`docs/infinite-feed.md` for tuning and tests.
+
+Migration `20261011_012_add_work_media.sql` adds nullable `works.media` JSONB.
+Cards, details, profile responses and search responses include optional `media`:
+`{url,width,height,dominantColor,sizes:[{w,url}]}`. Dimensions are EXIF-normalized.
+Publication validates actual image content and persists this metadata before
+publishing, offloading Pillow CPU work to a request-time thread. Downloads are
+capped at 10MiB and decoded images at 25 million pixels. Invalid images return
+422; preparation/storage failures return 503 and may be retried while still draft.
+Existing permissions and ownership checks remain unchanged.
+
+Static images get WebP variants up to 236/474/736/1080px without upscaling.
+Animated media keeps its original URL without static variants. Variants use
+year-long cache headers; personalized card JSON remains private/no-store.
+Deleting an artwork also deletes only its own derived variants. Originals are
+never replaced by preparation/backfill.
+
+Deploy schema and backend first. The deployment runs
+`python -m scripts.backfill_work_media` with existing database/storage secrets
+after health verification, then deploy the frontend. The additive backfill reads
+25 missing records per batch, commits individually, and can safely be rerun;
+failures remain eligible and make the backfill step fail visibly. It runs outside
+Lambda rather than during feed requests. No new environment variables are needed.
+All resources, clients and processing still initialize at execution/request time
+for future SnapStart compatibility.
 
 The image-only scope was confirmed by the user. No video pipeline is included.
-Until stages 2–5 are integrated, this endpoint alone does not change the UI or
-claim zero CLS, bounded DOM size, or measured 60fps scrolling. The existing
+The image-aware frontend reserves media geometry and bounds rendered cards.
+It does not claim measured 60fps on physical phones or field-certified CLS. The existing
 offset-based semantic search also needs separate cursor integration before it
 can claim the same pagination guarantees as this chronological endpoint.
 

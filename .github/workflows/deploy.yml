@@ -131,3 +131,10 @@ jobs:
 
       - name: Verify production health
         run: curl --fail --silent --show-error https://main-api.inkfig-hu.com/health
+
+      - name: Backfill artwork media
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+        run: python -m scripts.backfill_work_media

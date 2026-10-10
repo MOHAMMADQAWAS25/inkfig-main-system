@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import (
@@ -10,6 +11,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PostgresUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -40,6 +42,7 @@ class WorkModel(Base):
     storage_path: Mapped[str] = mapped_column(String(512), unique=True, nullable=False)
     mime_type: Mapped[str] = mapped_column(String(80), nullable=False)
     file_size: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    media: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="draft")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

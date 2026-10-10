@@ -152,6 +152,14 @@ async def publish(
         await service.publish(work_id, user)
     except WorkNotFoundError as e:
         raise HTTPException(404, "Work not found.") from e
+    except UnsupportedWorkFileError as e:
+        raise HTTPException(
+            422, "Invalid image or image exceeds the pixel limit."
+        ) from e
+    except StorageUploadError as e:
+        raise HTTPException(
+            503, "Image preparation is temporarily unavailable. Please retry."
+        ) from e
 
 
 @router.put("/{work_id}/like", status_code=204)

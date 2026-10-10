@@ -4,6 +4,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from src.entities.dto.media import ImageMedia
+
 
 @dataclass(frozen=True)
 class FeedPosition:
@@ -20,6 +22,7 @@ class FeedCardResponse(BaseModel):
     type_name_ar: str
     title: str
     image_url: str
+    media: ImageMedia | None = None
     mime_type: str
     like_count: int
     liked_by_me: bool

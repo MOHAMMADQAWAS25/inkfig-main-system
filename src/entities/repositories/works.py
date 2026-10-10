@@ -3,6 +3,7 @@ from typing import Protocol
 from uuid import UUID
 
 from src.entities.dto.feed import FeedCardResponse, FeedPosition
+from src.entities.dto.media import ImageMedia
 from src.entities.dto.works import (
     CreateWorkUploadRequest,
     ModeratedWorkTarget,
@@ -14,6 +15,7 @@ from src.entities.dto.works import (
 
 
 class WorkRepository(Protocol):
+    async def save_media(self, work_id: UUID, media: ImageMedia) -> None: ...
     async def list_feed_cards(
         self,
         viewer_id: UUID | None,
@@ -72,10 +74,16 @@ class WorkRepository(Protocol):
 
 
 class WorkStorage(Protocol):
+    async def download_image(self, path: str) -> bytes: ...
+    async def upload_variant(self, path: str, data: bytes) -> None: ...
     async def create_signed_upload(self, path: str) -> tuple[str, str]: ...
     async def object_exists(self, path: str) -> bool: ...
     async def delete_object(self, path: str) -> None: ...
     def public_url(self, path: str) -> str: ...
+
+
+class WorkMediaProcessor(Protocol):
+    async def prepare(self, path: str) -> ImageMedia: ...
 
 
 class WorkEmbeddingProvider(Protocol):

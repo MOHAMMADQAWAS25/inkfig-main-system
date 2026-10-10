@@ -27,6 +27,7 @@ from src.entities.exceptions.works import (
 )
 from src.entities.repositories.works import (
     WorkEmbeddingProvider,
+    WorkMediaProcessor,
     WorkRepository,
     WorkStorage,
 )
@@ -47,10 +48,12 @@ class WorkService:
         bucket: str,
         embedding_provider: WorkEmbeddingProvider | None = None,
         min_similarity: float = 0.20,
+        media_processor: WorkMediaProcessor | None = None,
     ) -> None:
         self._repository, self._storage, self._bucket = repository, storage, bucket
         self._embedding_provider = embedding_provider
         self._min_similarity = min_similarity
+        self._media_processor = media_processor
 
     async def list_types(self) -> list[WorkTypeResponse]:
         return await self._repository.list_types()
@@ -100,6 +103,9 @@ class WorkService:
         path = await self._repository.draft_path(work_id, user_id)
         if path is None or not await self._storage.object_exists(path):
             raise WorkNotFoundError
+        if self._media_processor is not None:
+            media = await self._media_processor.prepare(path)
+            await self._repository.save_media(work_id, media)
         if not await self._repository.publish(work_id, user_id):
             raise WorkNotFoundError
         if self._embedding_provider is not None:

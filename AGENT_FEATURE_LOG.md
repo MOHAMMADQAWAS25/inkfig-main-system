@@ -2652,3 +2652,44 @@ The practical clean-architecture guidance kept HTTP handling, application behavi
 - Verification: 57 tests passed; mypy passed for 55 source files; targeted Ruff checks passed; SAM template validation with lint passed.
 - Image-only scope confirmed. This is the first requested review point: existing frontend/masonry is unchanged. Hook/list, media metadata/variants, stable masonry positioning, virtualization, and integrated UI tests remain for subsequent stages.
 - Deployment: normal main-system GitHub Actions deployment; no frontend/user-system deployment needed.
+
+## 2026-10-11 - Complete infinite image feed media support
+
+### Request and scope
+
+Complete the remaining image-only infinite-feed stages while preserving natural
+artwork proportions, current requirements and future SnapStart compatibility.
+Main-system owns media preparation/storage/schema; frontend owns feed interaction
+and layout. User-system is unchanged.
+
+### Changes and files
+
+- Added validated `ImageMedia` DTO and optional media in feed/detail/profile/search responses.
+- Added `works.media` JSONB through `20261011_012_add_work_media.sql` and its ORM mapping.
+- Added request-time `ArtworkMediaProcessor`: verified content, EXIF-aware dimensions, dominant color, byte/pixel bounds, off-event-loop rendering and concurrent WebP uploads. Static variants use up to 236/474/736/1080px without upscaling; animated originals remain animated.
+- Publication persists metadata before publishing; invalid images return 422 and storage/preparation failures return 503. No import-time clients, connections, credentials, timestamps or image processing were added.
+- Extended storage integration to download bounded originals, upload cacheable variants and delete only an artwork's own variants with its original.
+- Added resumable `scripts/backfill_work_media.py` and a post-deployment GitHub workflow step using existing secrets; originals and artwork records are retained.
+- Updated repository/service contracts, SQL projections, dependency injection, tests, README and `docs/infinite-feed.md`.
+
+### API, permissions and database
+
+- `/feed` pagination contract is unchanged; card responses now include optional `{url,width,height,dominantColor,sizes:[{w,url}]}` in `media`.
+- Existing upload permission/ownership and published/active-owner visibility remain enforced. No role or permission changes.
+- Migration: `20261011_012_add_work_media.sql`; no new environment variables. Existing composite cursor indexes are reused.
+- Personalized feed responses remain private/no-store; generated images use long-lived cache headers.
+
+### Verification
+
+- 65 backend tests passed, including metadata/variants/animation, byte/pixel limits, scoped variant cleanup and publication integration.
+- mypy passed on `src tests scripts` (61 files); targeted Ruff checks/formatting and SAM validation with lint passed.
+- Frontend contract consumed and verified separately; no UI implementation belongs in this repository.
+
+### Deployment and limitations
+
+Apply migration, deploy main-system, finish the additive resumable backfill, then
+deploy frontend. Workflow reports failed backfill records visibly and they remain
+retryable. Semantic search retains its existing ranked numeric pagination; profile
+feeds retain their existing endpoint. Physical-phone FPS and field CLS targets are
+not certified by these checks. Push directly to main after pull/rebase under the
+standing workflow; no user-system changes or deployment required.

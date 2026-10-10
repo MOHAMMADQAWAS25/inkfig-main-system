@@ -10,6 +10,7 @@ from src.infrastructure.integrations.supabase_storage import SupabaseWorkStorage
 from src.infrastructure.integrations.voyage_embeddings import (
     VoyageMultimodalEmbeddingClient,
 )
+from src.infrastructure.integrations.work_media import ArtworkMediaProcessor
 from src.infrastructure.repositories.work_repository import SqlAlchemyWorkRepository
 
 
@@ -34,4 +35,5 @@ def get_work_service(
         settings.works_bucket,
         embeddings,
         settings.voyage_min_similarity,
+        ArtworkMediaProcessor(storage),
     )

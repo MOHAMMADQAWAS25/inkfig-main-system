@@ -7,6 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.entities.dto.feed import FeedCardResponse, FeedPosition
+from src.entities.dto.media import ImageMedia
 from src.entities.dto.works import (
     CreateWorkUploadRequest,
     ModeratedWorkTarget,
@@ -33,6 +34,13 @@ class SqlAlchemyWorkRepository:
     def __init__(self, session: AsyncSession, storage: SupabaseWorkStorage) -> None:
         self._session, self._storage = session, storage
 
+    async def save_media(self, work_id: UUID, media: ImageMedia) -> None:
+        await self._session.execute(
+            text("update works set media = cast(:media as jsonb) where work_id = :id"),
+            {"id": work_id, "media": media.model_dump_json()},
+        )
+        await self._session.commit()
+
     async def list_feed_cards(
         self,
         viewer_id: UUID | None,
@@ -56,7 +64,7 @@ class SqlAlchemyWorkRepository:
         statement = text(f"""
             with page as (
                 select w.work_id, w.owner_user_id, w.type_id, w.title,
-                       w.storage_path, w.mime_type, w.created_at,
+                       w.storage_path, w.mime_type, w.created_at, w.media,
                        t.name_en as type_name_en, t.name_ar as type_name_ar
                 from works w
                 join work_types t on t.type_id = w.type_id
@@ -223,6 +231,7 @@ class SqlAlchemyWorkRepository:
                 t.name_ar,
                 w.title,
                 w.description,
+                w.media,
                 coalesce(
                     (select jsonb_agg(jsonb_build_object('url', wl.url, 'label', wl.label) order by wl.position)
                      from work_links wl where wl.work_id = w.work_id),
@@ -267,6 +276,7 @@ class SqlAlchemyWorkRepository:
                 description=r.description,
                 links=r.links,
                 image_url=self._storage.public_url(r.storage_path),
+                media=r.media,
                 mime_type=r.mime_type,
                 like_count=r.like_count,
                 liked_by_me=r.liked,
@@ -507,7 +517,7 @@ class SqlAlchemyWorkRepository:
                            w.type_id, t.name_en, t.name_ar, w.title, w.description,
                            coalesce((select jsonb_agg(jsonb_build_object('url', wl.url, 'label', wl.label) order by wl.position)
                                      from work_links wl where wl.work_id = w.work_id), '[]'::jsonb) as links,
-                           w.storage_path, w.mime_type, w.created_at,
+                           w.storage_path, w.mime_type, w.created_at, w.media,
                            1 - (e.embedding <=> cast(:embedding as extensions.vector))
                              as similarity_score,
                            count(l.user_id) as like_count,
@@ -550,6 +560,7 @@ class SqlAlchemyWorkRepository:
                 saved_by_me=r.saved,
                 created_at=r.created_at,
                 search_rank=rank,
+                media=r.media,
                 similarity_score=float(r.similarity_score),
             )
             for rank, r in enumerate(rows, start=offset + 1)

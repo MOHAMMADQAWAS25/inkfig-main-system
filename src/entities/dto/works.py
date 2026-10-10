@@ -3,6 +3,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
 
+from src.entities.dto.media import ImageMedia
+
 
 class WorkTypeResponse(BaseModel):
     type_id: UUID
@@ -106,6 +108,7 @@ class WorkResponse(BaseModel):
     description: str
     links: list[WorkLinkResponse]
     image_url: str
+    media: ImageMedia | None = None
     mime_type: str
     like_count: int
     liked_by_me: bool = False
