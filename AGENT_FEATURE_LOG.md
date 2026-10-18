@@ -2947,3 +2947,85 @@ Support assigning profile works or uploading one work at a time to eligible exhi
 ### Notes
 
 Architecture skill kept HTTP contracts, service authorization and infrastructure SQL separate. No import-time clients or clocks introduced. Available means participation currently open and event start not passed because exhibitions have no end timestamp. Existing profile publication, banner cleanup limitations and non-realtime exhibition moderation remain unchanged.
+## 2026-10-18 - Moderated exhibition withdrawals and launch visibility
+
+### Request
+
+Hide exhibition works before launch, provide owner/manager record lists with status filters, allow pending deletion and require reason plus manager approval to remove approved submissions.
+
+### Changes
+
+- Public submission queries return no memberships until database event time, without restricting private owner/manager scopes.
+- Added owner withdrawal: pending membership removed directly; approved membership retains approval while a required-reason deletion request is pending.
+- Added manager approval/rejection of deletion requests, with rejection reasons and durable decision audits. Approval removes membership only, never the profile work or storage image.
+- Redacted withdrawal metadata from public responses and retained current role/owner checks.
+- Guarded original profile deletion before storage access while any approved membership exists; work locks coordinate with submission approval to prevent bypass.
+- Existing moderator deletion privileges, quota rules, duplicate controls and unrelated services remain unchanged.
+
+### Repositories
+
+- `inkfig-main-system`: protected withdrawal workflow, visibility gate and audit persistence.
+- `inkfig-user-FE`: fixed navbar, unified owner/review records, filters, card context and decision dialogs.
+
+### Files
+
+- `migrations/20261018_015_exhibition_withdrawal_requests.sql`: withdrawal metadata and audited decisions.
+- `src/entities/dto/exhibitions.py`: withdrawal input and private response fields.
+- `src/entities/repositories/exhibitions.py`: new persistence contracts.
+- `src/app/services/exhibition_service.py`: current permission checks and workflow delegation.
+- `src/interface/api/routes/exhibitions.py`: owner withdrawal and manager decision routes.
+- `src/infrastructure/repositories/exhibition_repository.py`: locked transitions, start-time visibility, redaction and audit inserts.
+- `src/infrastructure/repositories/work_repository.py`: approved-membership owner deletion guard before storage removal.
+- `tests/test_exhibitions.py`, `tests/test_exhibition_database.py`: authorization, state transitions, preservation, redaction and launch checks.
+- `docs/exhibitions.md`: API/lifecycle/deployment documentation.
+
+### API
+
+- `POST /api/v1/exhibitions/{id}/submissions/{submission_id}/withdrawal`: current participation permission and ownership; body reason optional for pending, required/nonblank for approved, max2000. Returns204; foreign/missing404, missing approved reason422, duplicate request or rejected membership409.
+- `PATCH /api/v1/exhibitions/{id}/submissions/{submission_id}/withdrawal`: management permission; approved/rejected decision, required rejection reason. Returns204; no pending deletion request409. Approval removes only exhibition membership; rejection preserves approval.
+- `GET /api/v1/exhibitions/{id}/submissions`: public memberships hidden before start; mine/manage include private withdrawal status/reason/review reason, public fields redacted. Existing bounded status pagination retained.
+- `DELETE /api/v1/works/{id}`: owner receives409 before image deletion if an approved exhibition membership remains. Moderator deletion behavior unchanged.
+
+### Database
+
+- Migration: `20261018_015_exhibition_withdrawal_requests.sql` - applied successfully to Supabase.
+- Adds nullable withdrawal status/reason/request time/review reason/reviewer FK/review time; existing rows remain NULL, with approved-state/reason constraints.
+- Adds partial pending-request index and RLS-protected exhibition_withdrawal_audits table with event/decision index. Work/user/reviewer audit FKs use SET NULL; membership identifier survives membership deletion, event FK cascades on exhibition deletion.
+- Audit writes and membership mutations share the same transaction and exhibition lock. No original works, vectors or storage objects deleted by withdrawals.
+- Rollback requires withdrawing UI/API, handling pending requests and exporting audit history before dropping new columns/table/indexes. No destructive backfill performed.
+
+### Permissions and scope
+
+- exhibitions.participate: only current verified active owners can withdraw their own entries, regardless of whether participation is now closed.
+- exhibitions.manage: supervisors, admins and system administrators review all exhibitions, including deletion requests.
+- Backend validates ownership, permissions and transition state on every mutation; private reasons never appear in public exhibition results.
+- Existing works.delete_any moderator authority remains intact and audited separately.
+
+### Frontend
+
+- Companion release adds fixed responsive action bar, separate review route and one paginated record list per owner/manager view with dropdown status filters.
+
+### Verification
+
+- `[passed] pytest -q` - 81 passed, opt-in database test skipped by default.
+- `[passed] INKFIG_EXHIBITION_DB_TEST=1 pytest -q tests/test_exhibition_database.py` - full real Supabase lifecycle, all fixtures rolled back; no storage writes/deletes.
+- `[passed] mypy src tests scripts` - no issues in 69 source files.
+- `[passed] targeted Ruff format/check`
+- `[passed] migration runner` - migration015 applied and database verified.
+- `[passed] git diff --check`
+- `[failed] initial real DB review check - PostgreSQL inferred conflicting varchar/text parameter types; explicit casts fixed it and final reruns passed.
+
+### Deployment
+
+- Migration applied before main backend release. Deploy main backend first, then frontend through existing workflows.
+- No new environment variables, IAM privileges or user-backend deployment required.
+
+### Git
+
+- Branch: `main`
+- Commit: `9e4aec9`
+- Push: pending final synchronization; outcome reported in handoff.
+
+### Notes
+
+The architecture skill preserved DTO/service/interface/infrastructure boundaries; atomic ownership/state rules are checked under transaction locks. Deletion here means exhibition membership, not the underlying artwork. Supabase testing preserved original works and audit reasons while exercising real SQL. No exhibition WebSocket behavior added; existing banner cleanup limitation unchanged.
