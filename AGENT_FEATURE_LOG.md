@@ -2702,3 +2702,98 @@ standing workflow; no user-system changes or deployment required.
 - Updated image-processing regression tests (large JPEG and EXIF rotation), documentation, and removed a terminal blank line from the additive migration.
 - Verification: 67 backend tests passed, with clean type/lint checks; the resumable backfill retries only missing metadata on the next normal main deployment.
 - Deployment: main-system follow-up, then frontend after backfill success. Processing still runs at request/execution time for future SnapStart compatibility.
+
+## 2026-10-18 - Exhibitions, participation and moderation
+
+### Request
+
+Enable exhibitions with names, descriptions, dates, optional banners, participation windows, owned-work submissions, approval/rejection reasons and participant blocking. User explicitly confirmed that supervisors manage all exhibitions.
+
+### Changes
+
+- Added public exhibition lists/details and management create/edit operations.
+- Added database-backed permission checks against current active verified accounts rather than relying on stale JWT roles.
+- Added pending submissions for owned published works, approval/rejection with required reason, owner-visible status and management queues.
+- Enforced opening/closing timestamps, duplicate protection and exhibition-specific participant blocks.
+- Blocks hide existing approved entries until unblocked; shared exhibition-row locks serialize submissions, blocks and reviews.
+- Added scoped signed banner uploads, bounded image verification/processing, and replacement cleanup of the preceding banner and variants.
+- Kept existing public artwork publication, search, interactions, social notifications and storage behavior intact.
+
+### Repositories
+
+- `inkfig-main-system`: exhibition API, application service, repository, schema, storage integration and tests.
+- `inkfig-user-FE`: bilingual exhibition pages and upload-and-submit workflow.
+- `inkfig-user-system`: no code changes; shared role-permission tables receive new grants from this migration.
+
+### Files
+
+- `migrations/20261018_013_create_exhibitions.sql`: schema, indexes, grants and banner bucket.
+- `src/entities/dto/exhibitions.py`: validated dates, descriptions, reasons, uploads and response contracts.
+- `src/entities/repositories/exhibitions.py`: persistence contract.
+- `src/app/services/exhibition_service.py`: permissions, review, participation and banner orchestration.
+- `src/infrastructure/repositories/exhibition_repository.py`: async persistence, visibility and transaction locks.
+- `src/interface/dependencies/exhibitions.py`: request-time wiring.
+- `src/interface/api/routes/exhibitions.py`: bounded public/protected endpoints.
+- `src/main.py`: router and application-error registration.
+- `tests/test_exhibitions.py`: permission, date, reason and storage-scope tests.
+- `tests/test_exhibition_database.py`: opt-in full workflow integration inside a rolled-back transaction.
+- `docs/exhibitions.md`: API, lifecycle, scope and deployment reference.
+
+### API
+
+- `GET /api/v1/exhibitions` and `GET /api/v1/exhibitions/{id}`: public listing/details.
+- `POST /api/v1/exhibitions` and `PUT /api/v1/exhibitions/{id}`: manage name, description, event date and participation dates.
+- `GET|POST /api/v1/exhibitions/{id}/submissions`: public/mine/manage scopes or submit an owned work.
+- `PATCH /api/v1/exhibitions/{id}/submissions/{submission_id}`: approve/reject, with required rejection reason.
+- `GET /api/v1/exhibitions/{id}/blocks`, `PUT|DELETE /api/v1/exhibitions/{id}/blocks/{user_id}`: bounded blocked list, block with reason, unblock.
+- `POST /api/v1/exhibitions/{id}/banner-uploads` and `/banner-uploads/complete`: image upload/validation and assignment.
+- Lists default to 20, maximum 50; offset continuation cursor. Dates require timezone and open < close <= event. 401 unauthenticated, 403 forbidden/blocked, 404 missing target, 409 closed/duplicate, 422 invalid values, 503 storage failure.
+
+### Database
+
+- Migration: `20261018_013_create_exhibitions.sql` — applied successfully to Supabase.
+- Adds exhibitions, exhibition_submissions and exhibition_blocks with FKs, cascading membership deletion, unique exhibition/work constraint, validated status/reasons/dates and ordered queue indexes.
+- Enables RLS and denies anon/authenticated table access; service role owns persistence.
+- Adds exhibitions.manage and exhibitions.participate grants to existing roles.
+- Creates exhibition-banners bucket, public reads, bounded image formats/size and signed backend-controlled writes.
+- No destructive backfill. Withdraw UI/API before rollback; retain data/banners unless deletion is explicitly authorized.
+
+### Permissions and scope
+
+- `exhibitions.manage`: every supervisor, admin and system administrator can manage every exhibition.
+- `exhibitions.participate`: user, supervisor, admin and system administrator can submit owned published works.
+- Guests see exhibition details and approved unblocked entries only. Pending/rejected entries are restricted to their owner or managers.
+- Backend validates permissions, active/verified account, ownership, participation window and block state.
+
+### Frontend
+
+- Companion frontend replaces exhibition placeholder with public cards/details and permission-scoped management forms, review queue, my-submissions section and blocking controls.
+- Students select existing works or upload/publish a new work then submit for approval.
+- Arabic/English, light/dark, responsive layout and bounded continuation loading.
+
+### Verification
+
+- `[passed] uv run --python 3.12 --with-requirements requirements.txt pytest -q` — 76 passed, optional DB test skipped by default.
+- `[passed] INKFIG_EXHIBITION_DB_TEST=1 pytest -q tests/test_exhibition_database.py` — full real Supabase workflow; all test data rolled back.
+- `[passed] uv run --python 3.12 --with-requirements requirements.txt mypy src tests scripts` — 69 files.
+- `[passed] targeted ruff check/format`
+- `[passed] sam validate --lint`
+- `[passed] python -m migrations.run` — exhibition migration applied and database verified.
+- `[passed] git diff --check`
+- `[failed] initial checks — list method shadowed built-in annotations and row mapping needed typing; corrected before successful full rerun.
+- `[failed] first DB fixture setup — existing auto-role trigger created default roles; corrected test fixture to upsert and reran successfully.
+
+### Deployment
+
+- Deploy main backend after migration, then frontend. Existing workflows handle deployments.
+- No new environment variables or IAM privileges. No user-backend deployment required.
+
+### Git
+
+- Branch: `main`
+- Commit: `af44dcb`
+- Push: pending final synchronization; recorded in the final handoff.
+
+### Notes
+
+Application decisions live in the service, SQL/storage details in infrastructure, and HTTP parsing in routes as required by the architecture guidance. No import-time clients or clock-dependent state were introduced for future SnapStart compatibility. Existing profile works remain public; review gates exhibition membership. Exhibition WebSocket events and scheduled banner orphan retries are not part of this release; immediate banner cleanup can fail after assignment and should be monitored.
