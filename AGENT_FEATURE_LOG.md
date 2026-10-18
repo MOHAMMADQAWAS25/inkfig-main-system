@@ -2797,3 +2797,72 @@ Enable exhibitions with names, descriptions, dates, optional banners, participat
 ### Notes
 
 Application decisions live in the service, SQL/storage details in infrastructure, and HTTP parsing in routes as required by the architecture guidance. No import-time clients or clock-dependent state were introduced for future SnapStart compatibility. Existing profile works remain public; review gates exhibition membership. Exhibition WebSocket events and scheduled banner orphan retries are not part of this release; immediate banner cleanup can fail after assignment and should be monitored.
+
+## 2026-10-18 - Upcoming and past exhibition pagination
+
+### Request
+
+Separate the exhibitions page into Upcoming Exhibitions and Past Exhibitions with screen-height-bounded cards.
+
+### Changes
+
+- Added optional upcoming/past classification using database time and each exhibition's scheduled event date.
+- Upcoming results sort nearest first; past results sort most recent first.
+- Each section has its own bounded continuation page, avoiding client-side classification of a single incomplete combined page.
+- Retained default all-results ordering, permissions, participation/review rules, and banner handling.
+
+### Repositories
+
+- `inkfig-main-system`: period-filtered listing and pagination.
+- `inkfig-user-FE`: separate sections and viewport-sized exhibition cards.
+
+### Files
+
+- `src/interface/api/routes/exhibitions.py`: validates all/upcoming/past period query.
+- `src/app/services/exhibition_service.py`: passes listing period through the application boundary.
+- `src/entities/repositories/exhibitions.py`: extends the repository contract.
+- `src/infrastructure/repositories/exhibition_repository.py`: indexed date predicates and ordering.
+- `tests/test_exhibitions.py`: independent period/cursor delegation test.
+- `tests/test_exhibition_database.py`: real database verification of disjoint upcoming/past results.
+- `docs/exhibitions.md`: documents period query and ordering.
+
+### API
+
+- `GET /api/v1/exhibitions?period=all|upcoming|past&limit=20&cursor=0`: optional validated period, defaults to all; upcoming uses event_at > now(), past uses event_at <= now().
+- Pagination limits, response shape, public visibility and invalid-query 422 behavior retained.
+
+### Database
+
+No migration required. Reuses exhibitions_event_idx in forward/reverse traversal for date predicates and deterministic event_at/exhibition_id ordering.
+
+### Permissions and scope
+
+- Listing remains public for all periods.
+- Existing management, ownership and participation authorization remains enforced by the backend.
+
+### Frontend
+
+- Companion release consumes independently paginated upcoming/past results and displays short card previews with full details linked.
+
+### Verification
+
+- `[passed] pytest -q` — 77 passed, 1 opt-in database test skipped by default.
+- `[passed] INKFIG_EXHIBITION_DB_TEST=1 pytest -q tests/test_exhibition_database.py` — real period-filter and lifecycle verification; all fixtures rolled back.
+- `[passed] mypy src tests scripts` — 69 files.
+- `[passed] targeted Ruff check and formatting`
+- `[passed] git diff --check`
+
+### Deployment
+
+- Deploy main backend before frontend through existing workflows.
+- No migration, secret, environment or IAM changes.
+
+### Git
+
+- Branch: `main`
+- Commit: `806c1bc`
+- Push: final synchronization and push reported in handoff.
+
+### Notes
+
+Past Exhibitions describes events whose scheduled start has passed; exhibitions currently have no separate end timestamp. Existing architecture boundaries and request-time database clocks are preserved for SnapStart compatibility.
