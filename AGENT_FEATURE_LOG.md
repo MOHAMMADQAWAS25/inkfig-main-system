@@ -2866,3 +2866,84 @@ No migration required. Reuses exhibitions_event_idx in forward/reverse traversal
 ### Notes
 
 Past Exhibitions describes events whose scheduled start has passed; exhibitions currently have no separate end timestamp. Existing architecture boundaries and request-time database clocks are preserved for SnapStart compatibility.
+
+## 2026-10-18 - Eligible exhibitions and ten-work participation limit
+
+### Request
+
+Support assigning profile works or uploading one work at a time to eligible exhibitions, require review, limit each user's active participation to ten works per exhibition and provide personal approved/pending pages.
+
+### Changes
+
+- Added authenticated, paginated eligibility lookup filtered by open participation, future event start, blocks, active quota and optional owned work/already-submitted exclusion.
+- Enforced at most ten pending/approved entries per user/exhibition while holding the existing exhibition transaction lock.
+- Rejected entries free capacity; reconsidering rejected entries checks capacity before approval. Existing duplicate constraints and rejection reasons remain.
+- Added status filtering before pagination without weakening public/mine/manage visibility.
+- Existing uploads remain public profile works; approval controls exhibition membership. Authentication, storage cleanup and unrelated APIs unchanged.
+
+### Repositories
+
+- `inkfig-main-system`: eligibility API, quota enforcement, filtered pagination and index.
+- `inkfig-user-FE`: assignment dialog, upload participation, toolbar and personal submission page.
+
+### Files
+
+- `src/interface/api/routes/exhibitions.py`: eligible route and validated status query.
+- `src/app/services/exhibition_service.py`: current participation authorization and paginated eligibility/status delegation.
+- `src/entities/repositories/exhibitions.py`: extended repository contracts.
+- `src/infrastructure/repositories/exhibition_repository.py`: eligibility query and locked quota checks.
+- `migrations/20261018_014_index_active_exhibition_submissions.sql`: active owner quota index.
+- `tests/test_exhibitions.py`: permission and owner/status delegation tests.
+- `tests/test_exhibition_database.py`: real rolled-back eligibility, duplicate, quota, review and status lifecycle checks.
+- `docs/exhibitions.md`: contract, lifecycle and deployment decisions.
+
+### API
+
+- `GET /api/v1/exhibitions/eligible`: current verified/active actor requires exhibitions.participate; optional work_id must be owned/published (404 otherwise), optional exhibition_id targets one exhibition. Defaults limit20, max50, cursor0. Excludes closed/started, blocked, full and already-assigned entries.
+- `GET /api/v1/exhibitions/{id}/submissions`: optional status pending|approved|rejected filters before pagination while retaining ownership/management/public checks; invalid status422.
+- `POST /api/v1/exhibitions/{id}/submissions`: one work_id per request; pending by default; full active quota409, duplicate409, closed409, blocked403, foreign/unpublished work404.
+- `PATCH /api/v1/exhibitions/{id}/submissions/{submission_id}`: approving a previously rejected entry returns409 if active quota is full. Required rejection reason unchanged.
+
+### Database
+
+- Migration: `20261018_014_index_active_exhibition_submissions.sql` - applied successfully to Supabase.
+- Adds partial index on exhibition_id/user_id for pending/approved rows; no schema fields, defaults, constraints, FKs or stored data changed.
+- Existing row locks serialize quota checks with submissions/reviews/blocks. No destructive backfill; existing over-limit entries retained, new additions refused.
+- Rollback: drop public.exhibition_submissions_active_owner_idx after withdrawing new application behavior if rolling back the feature.
+
+### Permissions and scope
+
+- exhibitions.participate: user/supervisor/admin/system_administrator; current active/verified account and database permissions checked by backend.
+- exhibitions.manage: supervisors/admins/system administrators manage all exhibitions.
+- Eligibility is actor-specific, optional work must belong to actor, private status sections remain owner-only; guests only see public approved entries.
+- Backend validates every submission independent of frontend eligibility/preflight.
+
+### Frontend
+
+- Companion frontend supplies eligible assignment dialog, single-file exhibition upload, blurred action toolbar and independently paginated personal status sections.
+
+### Verification
+
+- `[passed] pytest -q` - 80 passed, optional DB test skipped by default.
+- `[passed] INKFIG_EXHIBITION_DB_TEST=1 pytest -q tests/test_exhibition_database.py` - real Supabase lifecycle, all fixtures rolled back and no storage writes.
+- `[passed] mypy src tests scripts` - 69 source files, no issues.
+- `[passed] targeted Ruff format/check`
+- `[passed] python -m migrations.run` via dotenv-loaded configuration - migration014 applied and database verified.
+- `[passed] git diff --check`
+- `[failed] initial test run - expected repository call omitted new optional status parameter; updated assertion and final rerun passed.
+- `[failed] initial sandbox Python discovery - installed uv Python directory inaccessible; approved environment rerun passed.
+
+### Deployment
+
+- Migration applied before backend release. Deploy main backend, then frontend through existing main workflows.
+- No new environment variables, IAM permissions or user-backend deployment.
+
+### Git
+
+- Branch: `main`
+- Commit: `cb9b330`
+- Push: pending final synchronization; verified outcome reported in handoff.
+
+### Notes
+
+Architecture skill kept HTTP contracts, service authorization and infrastructure SQL separate. No import-time clients or clocks introduced. Available means participation currently open and event start not passed because exhibitions have no end timestamp. Existing profile publication, banner cleanup limitations and non-realtime exhibition moderation remain unchanged.
