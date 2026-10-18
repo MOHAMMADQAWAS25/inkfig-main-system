@@ -61,6 +61,32 @@ def test_rejection_requires_a_real_reason() -> None:
 
 
 @pytest.mark.asyncio
+async def test_withdrawal_requires_owner_permission_and_review_requires_manager() -> (
+    None
+):
+    app, repo = service()
+    actor, exhibition, submission = uuid4(), uuid4(), uuid4()
+    repo.allowed.return_value = False
+    with pytest.raises(ExhibitionError):
+        await app.withdraw(actor, exhibition, submission, "My reason")
+    with pytest.raises(ExhibitionError):
+        await app.review_withdrawal(
+            actor, exhibition, submission, ReviewInput(status="approved")
+        )
+    repo.withdraw.assert_not_awaited()
+    repo.review_withdrawal.assert_not_awaited()
+    repo.allowed.return_value = True
+    await app.withdraw(actor, exhibition, submission, "My reason")
+    repo.withdraw.assert_awaited_once_with(exhibition, submission, actor, "My reason")
+    await app.review_withdrawal(
+        actor, exhibition, submission, ReviewInput(status="rejected", reason="Keep it")
+    )
+    repo.review_withdrawal.assert_awaited_once_with(
+        exhibition, submission, actor, "rejected", "Keep it"
+    )
+
+
+@pytest.mark.asyncio
 async def test_exhibition_sections_preserve_their_own_pagination_scope() -> None:
     app, repo = service()
     item = Exhibition(

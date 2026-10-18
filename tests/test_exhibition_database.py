@@ -14,6 +14,7 @@ from src.infrastructure.integrations.supabase_storage import SupabaseWorkStorage
 from src.infrastructure.repositories.exhibition_repository import (
     SqlAlchemyExhibitionRepository,
 )
+from src.infrastructure.repositories.work_repository import SqlAlchemyWorkRepository
 
 
 class RollbackSession(AsyncSession):
@@ -182,7 +183,7 @@ async def test_real_database_exhibition_workflow() -> None:
                                 exhibition_id, None, "public", 20, 0
                             )
                         )
-                        == 1
+                        == 0
                     )
                     await repository.block(
                         exhibition_id, student, manager, "Exhibition rule violation"
@@ -207,9 +208,101 @@ async def test_real_database_exhibition_workflow() -> None:
                                 exhibition_id, None, "public", 20, 0
                             )
                         )
-                        == 1
+                        == 0
                     )
                     # Ten active submissions across both entry paths; rejection frees a slot.
+                    with pytest.raises(ExhibitionError, match="not found"):
+                        await repository.withdraw(
+                            exhibition_id, submission, manager, "Foreign owner"
+                        )
+                    with pytest.raises(ExhibitionError, match="reason is required"):
+                        await repository.withdraw(
+                            exhibition_id, submission, student, None
+                        )
+                    work_repository = SqlAlchemyWorkRepository(session, works)
+                    with pytest.raises(ExhibitionError, match="Request removal"):
+                        await work_repository.owned_storage_path(work, student)
+                    await repository.withdraw(
+                        exhibition_id, submission, student, "Replace this entry"
+                    )
+                    pending_deletion = await repository.submissions(
+                        exhibition_id, student, "mine", 20, 0
+                    )
+                    assert pending_deletion[0].status == "approved"
+                    assert pending_deletion[0].withdrawal_status == "pending"
+                    with pytest.raises(ExhibitionError, match="already pending"):
+                        await repository.withdraw(
+                            exhibition_id, submission, student, "Duplicate request"
+                        )
+                    await repository.review_withdrawal(
+                        exhibition_id,
+                        submission,
+                        manager,
+                        "rejected",
+                        "Please keep it displayed",
+                    )
+                    denied = await repository.submissions(
+                        exhibition_id, student, "mine", 20, 0
+                    )
+                    assert (
+                        denied[0].withdrawal_review_reason == "Please keep it displayed"
+                    )
+                    await repository.withdraw(
+                        exhibition_id, submission, student, "A new reason"
+                    )
+                    await repository.review_withdrawal(
+                        exhibition_id, submission, manager, "approved", None
+                    )
+                    assert (
+                        await repository.submissions(
+                            exhibition_id, student, "mine", 20, 0
+                        )
+                        == []
+                    )
+                    assert (
+                        await session.scalar(
+                            text("select count(*) from works where work_id=:work"),
+                            {"work": work},
+                        )
+                        == 1
+                    )
+                    assert (
+                        await session.scalar(
+                            text(
+                                "select count(*) from exhibition_withdrawal_audits where exhibition_id=:id"
+                            ),
+                            {"id": exhibition_id},
+                        )
+                        == 2
+                    )
+                    assert (
+                        await work_repository.owned_storage_path(work, student)
+                        is not None
+                    )
+                    await repository.submit(exhibition_id, student, work)
+                    temporary = (
+                        await repository.submissions(
+                            exhibition_id, student, "mine", 20, 0
+                        )
+                    )[0]
+                    await repository.withdraw(
+                        exhibition_id, temporary.submission_id, student, None
+                    )
+                    assert (
+                        await repository.submissions(
+                            exhibition_id, student, "mine", 20, 0
+                        )
+                        == []
+                    )
+                    await repository.submit(exhibition_id, student, work)
+                    submission = (
+                        await repository.submissions(
+                            exhibition_id, student, "mine", 20, 0
+                        )
+                    )[0].submission_id
+                    await repository.review(
+                        exhibition_id, submission, manager, "approved", None
+                    )
                     for _ in range(9):
                         extra = uuid4()
                         await session.execute(
@@ -258,6 +351,64 @@ async def test_real_database_exhibition_workflow() -> None:
                             )
                         )
                         == 10
+                    )
+                    remaining = await repository.submissions(
+                        exhibition_id, student, "mine", 20, 0, "pending"
+                    )
+                    await repository.review(
+                        exhibition_id,
+                        remaining[0].submission_id,
+                        manager,
+                        "approved",
+                        None,
+                    )
+                    assert (
+                        await repository.submissions(
+                            exhibition_id, None, "public", 20, 0
+                        )
+                        == []
+                    )
+                    await session.execute(
+                        text(
+                            "update exhibitions set event_at=now()-interval '1 second',participation_closes_at=now()-interval '2 seconds' where exhibition_id=:id"
+                        ),
+                        {"id": exhibition_id},
+                    )
+                    visible = await repository.submissions(
+                        exhibition_id, None, "public", 20, 0
+                    )
+                    assert len(visible) == 1 and visible[0].withdrawal_reason is None
+                    await repository.withdraw(
+                        exhibition_id,
+                        remaining[0].submission_id,
+                        student,
+                        "Private withdrawal reason",
+                    )
+                    visible = await repository.submissions(
+                        exhibition_id, None, "public", 20, 0
+                    )
+                    assert (
+                        len(visible) == 1
+                        and visible[0].withdrawal_reason is None
+                        and visible[0].withdrawal_status is None
+                    )
+                    await repository.block(
+                        exhibition_id, student, manager, "Public visibility check"
+                    )
+                    assert (
+                        await repository.submissions(
+                            exhibition_id, None, "public", 20, 0
+                        )
+                        == []
+                    )
+                    await repository.block(exhibition_id, student, manager, None)
+                    assert (
+                        len(
+                            await repository.submissions(
+                                exhibition_id, None, "public", 20, 0
+                            )
+                        )
+                        == 1
                     )
                     await session.execute(
                         text(

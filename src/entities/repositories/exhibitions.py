@@ -5,6 +5,17 @@ from src.entities.dto.exhibitions import Exhibition, ExhibitionInput, Submission
 
 
 class ExhibitionRepository(Protocol):
+    async def withdraw(
+        self, exhibition_id: UUID, submission_id: UUID, actor: UUID, reason: str | None
+    ) -> None: ...
+    async def review_withdrawal(
+        self,
+        exhibition_id: UUID,
+        submission_id: UUID,
+        actor: UUID,
+        status: str,
+        reason: str | None,
+    ) -> None: ...
     async def eligible(
         self,
         user_id: UUID,

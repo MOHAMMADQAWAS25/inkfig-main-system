@@ -29,6 +29,16 @@ published works while participation is open and they are not blocked.
   weakening scope. Each personal status section uses an independent cursor.
 - `PATCH /api/v1/exhibitions/{id}/submissions/{submission_id}`:
   `{status: approved|rejected, reason?: string}`. Rejections require a reason.
+- `POST /api/v1/exhibitions/{id}/submissions/{submission_id}/withdrawal`:
+  owner-only, requires current participation permission. Body `{reason?: string}`.
+  Pending memberships are removed immediately; approved memberships require a
+  nonblank reason and become pending deletion requests without losing approval.
+  Rejected memberships cannot be withdrawn. Missing/foreign membership404,
+  missing approved-deletion reason422, duplicate request/invalid state409.
+- `PATCH /api/v1/exhibitions/{id}/submissions/{submission_id}/withdrawal`:
+  requires management, body `{status: approved|rejected, reason?: string}`.
+  Approval removes membership only; rejection requires a reason and keeps the work
+  approved. No pending request409. Both decisions preserve a separate audit record.
 - `PUT /api/v1/exhibitions/{id}/blocks/{user_id}`: `{reason}`, blocks participation
   and hides all existing entries by this user from the public exhibition.
 - `DELETE /api/v1/exhibitions/{id}/blocks/{user_id}`: permits participation again;
@@ -50,6 +60,9 @@ or exhibition returns 404, insufficient permissions/blocked participation return
 failures return 503.
 
 Existing and newly uploaded works remain normal publicly published profile works.
+Public exhibition memberships are hidden until the scheduled event starts, enforced
+by database time; private owner/review scopes remain available beforehand. Public
+responses redact withdrawal request details.
 Approval controls their exhibition membership only. Rejected entries retain their
 reason for the owner and managers. A rejected work cannot be submitted twice to the
 same exhibition; managers can reconsider its existing entry.
@@ -62,6 +75,10 @@ requests from exceeding it. A full quota returns 409. Existing over-limit histor
 is not deleted; further submissions/reapprovals are refused until capacity returns.
 Uploading still publishes a normal profile work, then submits its exhibition
 membership; a failed membership request does not delete that profile work.
+Owner deletion of an original profile work is blocked with409 while any approved
+exhibition membership exists. The guard locks the work before any storage deletion,
+and approval takes a compatible shared work lock to prevent concurrent bypass.
+Existing moderator deletion privileges and their audited reasons remain unchanged.
 
 ## Deployment
 
@@ -70,6 +87,11 @@ deploy the frontend. No new environment variables or IAM privileges are needed.
 For the assignment/quota release, also apply
 `20261018_014_index_active_exhibition_submissions.sql`, which adds a partial index
 on exhibition/user for pending and approved entries without changing existing data.
+The record/withdrawal release also requires
+`20261018_015_exhibition_withdrawal_requests.sql`: nullable withdrawal metadata,
+pending-request index and RLS-protected decision audit history. Existing entries
+remain unchanged. Do not drop these fields/table during rollback without exporting
+history and handling outstanding requests first.
 Rollback of that index is safe after withdrawing the new application behavior.
 The migration adds three RLS-protected tables, indexed moderation/owner queues,
 cascading submission/work relationships, role permission assignments and a public

@@ -232,7 +232,7 @@ class SqlAlchemyExhibitionRepository:
         status: str | None = None,
     ) -> list[Submission]:
         condition = (
-            "s.status='approved'"
+            "s.status='approved' and exists(select 1 from exhibitions e where e.exhibition_id=s.exhibition_id and e.event_at <= now())"
             if scope == "public"
             else "s.user_id=cast(:viewer as uuid)"
             if scope == "mine"
@@ -262,12 +262,21 @@ class SqlAlchemyExhibitionRepository:
             .mappings()
             .all()
         )
-        return [
-            Submission(
-                **dict(row), image_url=self.works.public_url(row["storage_path"])
+        result = []
+        for row in rows:
+            data = dict(row)
+            if scope == "public":
+                for key in (
+                    "withdrawal_status",
+                    "withdrawal_reason",
+                    "withdrawal_requested_at",
+                    "withdrawal_review_reason",
+                ):
+                    data[key] = None
+            result.append(
+                Submission(**data, image_url=self.works.public_url(row["storage_path"]))
             )
-            for row in rows
-        ]
+        return result
 
     async def review(
         self,
@@ -279,6 +288,12 @@ class SqlAlchemyExhibitionRepository:
     ) -> None:
         await self.lock(exhibition_id)
         if status == "approved":
+            await self.session.execute(
+                text(
+                    "select w.work_id from works w join exhibition_submissions s on s.work_id=w.work_id where s.exhibition_id=:id and s.submission_id=:submission for share of w"
+                ),
+                {"id": exhibition_id, "submission": submission_id},
+            )
             previous = (
                 (
                     await self.session.execute(
@@ -294,8 +309,13 @@ class SqlAlchemyExhibitionRepository:
             if previous is not None and previous["status"] == "rejected":
                 await self.check_capacity(exhibition_id, previous["user_id"])
         found = await self.session.scalar(
-            text("""update exhibition_submissions set status=:status,rejection_reason=:reason,
-            reviewer_user_id=:actor,reviewed_at=now() where exhibition_id=:id and submission_id=:submission
+            text("""update exhibition_submissions set status=cast(:status as varchar),rejection_reason=:reason,
+            reviewer_user_id=:actor,reviewed_at=now(),
+            withdrawal_status=case when cast(:status as varchar)='rejected' then null else withdrawal_status end,
+            withdrawal_reason=case when cast(:status as varchar)='rejected' then null else withdrawal_reason end,
+            withdrawal_requested_at=case when cast(:status as varchar)='rejected' then null else withdrawal_requested_at end,
+            withdrawal_review_reason=case when cast(:status as varchar)='rejected' then null else withdrawal_review_reason end
+            where exhibition_id=:id and submission_id=:submission
             returning submission_id"""),
             {
                 "id": exhibition_id,
@@ -307,6 +327,101 @@ class SqlAlchemyExhibitionRepository:
         )
         if found is None:
             raise ExhibitionError(404, "Submission not found.")
+        await self.session.commit()
+
+    async def withdraw(
+        self, exhibition_id: UUID, submission_id: UUID, actor: UUID, reason: str | None
+    ) -> None:
+        await self.lock(exhibition_id)
+        params = {
+            "id": exhibition_id,
+            "submission": submission_id,
+            "actor": actor,
+            "reason": reason,
+        }
+        row = (
+            (
+                await self.session.execute(
+                    text(
+                        "select status,withdrawal_status from exhibition_submissions where exhibition_id=:id and submission_id=:submission and user_id=:actor for update"
+                    ),
+                    params,
+                )
+            )
+            .mappings()
+            .first()
+        )
+        if row is None:
+            raise ExhibitionError(404, "Submission not found.")
+        if row["status"] == "pending":
+            await self.session.execute(
+                text(
+                    "delete from exhibition_submissions where submission_id=:submission"
+                ),
+                params,
+            )
+        elif row["status"] == "approved":
+            if not reason:
+                raise ExhibitionError(
+                    422, "A deletion reason is required for approved works."
+                )
+            if row["withdrawal_status"] == "pending":
+                raise ExhibitionError(409, "A deletion request is already pending.")
+            await self.session.execute(
+                text("""update exhibition_submissions set withdrawal_status='pending',
+                withdrawal_reason=:reason,withdrawal_requested_at=now(),withdrawal_review_reason=null,
+                withdrawal_reviewer_user_id=null,withdrawal_reviewed_at=null where submission_id=:submission"""),
+                params,
+            )
+        else:
+            raise ExhibitionError(
+                409, "Only pending or approved submissions can be withdrawn."
+            )
+        await self.session.commit()
+
+    async def review_withdrawal(
+        self,
+        exhibition_id: UUID,
+        submission_id: UUID,
+        actor: UUID,
+        status: str,
+        reason: str | None,
+    ) -> None:
+        await self.lock(exhibition_id)
+        params = {
+            "id": exhibition_id,
+            "submission": submission_id,
+            "actor": actor,
+            "reason": reason,
+        }
+        found = await self.session.scalar(
+            text(
+                "select submission_id from exhibition_submissions where exhibition_id=:id and submission_id=:submission and status='approved' and withdrawal_status='pending' for update"
+            ),
+            params,
+        )
+        if found is None:
+            raise ExhibitionError(409, "No pending deletion request was found.")
+        await self.session.execute(
+            text("""insert into exhibition_withdrawal_audits(exhibition_id,submission_id,work_id,user_id,reason,decision,review_reason,reviewer_user_id)
+            select exhibition_id,submission_id,work_id,user_id,withdrawal_reason,:decision,:reason,:actor
+            from exhibition_submissions where submission_id=:submission"""),
+            {**params, "decision": status},
+        )
+        if status == "approved":
+            await self.session.execute(
+                text(
+                    "delete from exhibition_submissions where submission_id=:submission"
+                ),
+                params,
+            )
+        else:
+            await self.session.execute(
+                text("""update exhibition_submissions set withdrawal_status='rejected',
+                withdrawal_review_reason=:reason,withdrawal_reviewer_user_id=:actor,withdrawal_reviewed_at=now()
+                where submission_id=:submission"""),
+                params,
+            )
         await self.session.commit()
 
     async def block(

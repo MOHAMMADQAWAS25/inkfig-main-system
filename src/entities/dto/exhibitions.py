@@ -57,6 +57,15 @@ class SubmissionInput(BaseModel):
     work_id: UUID
 
 
+class WithdrawalInput(BaseModel):
+    reason: str | None = Field(default=None, max_length=2000)
+
+    @field_validator("reason")
+    @classmethod
+    def trim_reason(cls, value: str | None) -> str | None:
+        return value.strip() or None if value else None
+
+
 class ReviewInput(BaseModel):
     status: Literal["approved", "rejected"]
     reason: str | None = Field(default=None, max_length=2000)
@@ -90,6 +99,10 @@ class Submission(BaseModel):
     status: str
     rejection_reason: str | None
     created_at: datetime
+    withdrawal_status: str | None = None
+    withdrawal_reason: str | None = None
+    withdrawal_requested_at: datetime | None = None
+    withdrawal_review_reason: str | None = None
 
 
 class SubmissionPage(BaseModel):

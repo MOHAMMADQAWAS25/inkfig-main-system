@@ -397,13 +397,30 @@ class SqlAlchemyWorkRepository:
         return True
 
     async def owned_storage_path(self, work_id: UUID, owner_id: UUID) -> str | None:
-        return await self._session.scalar(
-            select(WorkModel.storage_path).where(
+        path = await self._session.scalar(
+            select(WorkModel.storage_path)
+            .where(
                 WorkModel.work_id == work_id,
                 WorkModel.owner_user_id == owner_id,
                 WorkModel.status == "published",
             )
+            .with_for_update()
         )
+        if path is not None:
+            from src.entities.dto.exhibitions import ExhibitionError
+
+            protected = await self._session.scalar(
+                text(
+                    "select exists(select 1 from exhibition_submissions where work_id=:work and status='approved')"
+                ),
+                {"work": work_id},
+            )
+            if protected:
+                raise ExhibitionError(
+                    409,
+                    "Request removal from approved exhibitions before deleting this work.",
+                )
+        return path
 
     async def delete_owned(self, work_id: UUID, owner_id: UUID) -> bool:
         deleted_id = await self._session.scalar(

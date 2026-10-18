@@ -128,6 +128,28 @@ class ExhibitionService:
             raise ExhibitionError(409, "You cannot block yourself.")
         await self.repository.block(exhibition_id, user_id, manager, reason)
 
+    async def withdraw(
+        self,
+        actor: UUID | None,
+        exhibition_id: UUID,
+        submission_id: UUID,
+        reason: str | None,
+    ) -> None:
+        user = await self.authorize(actor, "exhibitions.participate")
+        await self.repository.withdraw(exhibition_id, submission_id, user, reason)
+
+    async def review_withdrawal(
+        self,
+        actor: UUID | None,
+        exhibition_id: UUID,
+        submission_id: UUID,
+        data: ReviewInput,
+    ) -> None:
+        manager = await self.authorize(actor, "exhibitions.manage")
+        await self.repository.review_withdrawal(
+            exhibition_id, submission_id, manager, data.status, data.reason
+        )
+
     async def prepare_banner(
         self, actor: UUID | None, exhibition_id: UUID, data: BannerUploadInput
     ) -> dict[str, str]:

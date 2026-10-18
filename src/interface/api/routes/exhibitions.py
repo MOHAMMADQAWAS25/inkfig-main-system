@@ -14,6 +14,7 @@ from src.entities.dto.exhibitions import (
     ReviewInput,
     SubmissionInput,
     SubmissionPage,
+    WithdrawalInput,
 )
 from src.interface.dependencies.authentication import get_optional_user
 from src.interface.dependencies.exhibitions import get_exhibition_service
@@ -100,6 +101,30 @@ async def block(
     exhibition_id: UUID, user_id: UUID, data: BlockInput, service: Service, actor: Actor
 ) -> None:
     await service.block(actor, exhibition_id, user_id, data.reason)
+
+
+@router.post("/{exhibition_id}/submissions/{submission_id}/withdrawal", status_code=204)
+async def withdraw(
+    exhibition_id: UUID,
+    submission_id: UUID,
+    data: WithdrawalInput,
+    service: Service,
+    actor: Actor,
+) -> None:
+    await service.withdraw(actor, exhibition_id, submission_id, data.reason)
+
+
+@router.patch(
+    "/{exhibition_id}/submissions/{submission_id}/withdrawal", status_code=204
+)
+async def review_withdrawal(
+    exhibition_id: UUID,
+    submission_id: UUID,
+    data: ReviewInput,
+    service: Service,
+    actor: Actor,
+) -> None:
+    await service.review_withdrawal(actor, exhibition_id, submission_id, data)
 
 
 @router.delete("/{exhibition_id}/blocks/{user_id}", status_code=204)
