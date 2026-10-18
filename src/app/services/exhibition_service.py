@@ -43,6 +43,23 @@ class ExhibitionService:
     async def get(self, exhibition_id: UUID) -> Exhibition:
         return await self.repository.get(exhibition_id)
 
+    async def eligible(
+        self,
+        actor: UUID | None,
+        limit: int,
+        cursor: int,
+        work_id: UUID | None = None,
+        exhibition_id: UUID | None = None,
+    ) -> ExhibitionPage:
+        user = await self.authorize(actor, "exhibitions.participate")
+        rows = await self.repository.eligible(
+            user, limit + 1, cursor, work_id, exhibition_id
+        )
+        return ExhibitionPage(
+            items=rows[:limit],
+            next_cursor=cursor + limit if len(rows) > limit else None,
+        )
+
     async def blocks(
         self, actor: UUID | None, exhibition_id: UUID, limit: int, cursor: int
     ) -> dict[str, object]:
@@ -76,6 +93,7 @@ class ExhibitionService:
         scope: str,
         limit: int,
         cursor: int,
+        status: str | None = None,
     ) -> SubmissionPage:
         if scope == "manage":
             await self.authorize(actor, "exhibitions.manage")
@@ -83,7 +101,7 @@ class ExhibitionService:
             await self.authorize(actor, "exhibitions.participate")
         await self.repository.get(exhibition_id)
         rows = await self.repository.submissions(
-            exhibition_id, actor, scope, limit + 1, cursor
+            exhibition_id, actor, scope, limit + 1, cursor, status
         )
         return SubmissionPage(
             items=rows[:limit],

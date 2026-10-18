@@ -86,6 +86,62 @@ class SqlAlchemyExhibitionRepository:
             raise ExhibitionError(404, "Exhibition not found.")
         return self.exhibition(row)
 
+    async def eligible(
+        self,
+        user_id: UUID,
+        limit: int,
+        cursor: int,
+        work_id: UUID | None = None,
+        exhibition_id: UUID | None = None,
+    ) -> list[Exhibition]:
+        params = {
+            "user": user_id,
+            "work": work_id,
+            "id": exhibition_id,
+            "limit": limit,
+            "cursor": cursor,
+        }
+        if work_id is not None:
+            owned = await self.session.scalar(
+                text(
+                    "select exists(select 1 from works where work_id=:work and owner_user_id=:user and status='published')"
+                ),
+                params,
+            )
+            if not owned:
+                raise ExhibitionError(404, "Select one of your published works.")
+        rows = (
+            (
+                await self.session.execute(
+                    text("""
+            select e.* from exhibitions e
+            where e.participation_opens_at <= now() and now() < e.participation_closes_at
+            and e.event_at > now() and (cast(:id as uuid) is null or e.exhibition_id=:id)
+            and not exists(select 1 from exhibition_blocks b where b.exhibition_id=e.exhibition_id and b.user_id=:user)
+            and (select count(*) from exhibition_submissions s where s.exhibition_id=e.exhibition_id and s.user_id=:user and s.status in ('pending','approved')) < 10
+            and (cast(:work as uuid) is null or not exists(select 1 from exhibition_submissions s where s.exhibition_id=e.exhibition_id and s.work_id=:work))
+            order by e.event_at,e.exhibition_id limit :limit offset :cursor
+        """),
+                    params,
+                )
+            )
+            .mappings()
+            .all()
+        )
+        return [self.exhibition(row) for row in rows]
+
+    async def check_capacity(self, exhibition_id: UUID, user_id: UUID) -> None:
+        count = await self.session.scalar(
+            text("""select count(*) from exhibition_submissions
+            where exhibition_id=:id and user_id=:user and status in ('pending','approved')"""),
+            {"id": exhibition_id, "user": user_id},
+        )
+        if count is not None and count >= 10:
+            raise ExhibitionError(
+                409,
+                "You can have at most 10 pending or approved works in this exhibition.",
+            )
+
     async def save(
         self, user_id: UUID, data: ExhibitionInput, exhibition_id: UUID | None
     ) -> Exhibition:
@@ -143,6 +199,15 @@ class SqlAlchemyExhibitionRepository:
         )
         if not owned:
             raise ExhibitionError(404, "Select one of your published works.")
+        duplicate = await self.session.scalar(
+            text(
+                "select exists(select 1 from exhibition_submissions where exhibition_id=:id and work_id=:work)"
+            ),
+            params,
+        )
+        if duplicate:
+            raise ExhibitionError(409, "This work has already been submitted.")
+        await self.check_capacity(exhibition_id, user_id)
         try:
             await self.session.execute(
                 text(
@@ -164,6 +229,7 @@ class SqlAlchemyExhibitionRepository:
         scope: str,
         limit: int,
         cursor: int,
+        status: str | None = None,
     ) -> list[Submission]:
         condition = (
             "s.status='approved'"
@@ -180,6 +246,7 @@ class SqlAlchemyExhibitionRepository:
             join works w on w.work_id=s.work_id join user_profiles p on p.user_id=s.user_id
             join user_accounts a on a.user_id=s.user_id
             where s.exhibition_id=:id and {condition} and a.account_status='active' and w.status='published'
+            and (cast(:status as text) is null or s.status=:status)
             {"and not exists(select 1 from exhibition_blocks b where b.exhibition_id=s.exhibition_id and b.user_id=s.user_id)" if scope == "public" else ""}
             order by s.created_at desc,s.submission_id desc limit :limit offset :cursor
         """),
@@ -188,6 +255,7 @@ class SqlAlchemyExhibitionRepository:
                         "viewer": viewer,
                         "limit": limit,
                         "cursor": cursor,
+                        "status": status,
                     },
                 )
             )
@@ -210,6 +278,21 @@ class SqlAlchemyExhibitionRepository:
         reason: str | None,
     ) -> None:
         await self.lock(exhibition_id)
+        if status == "approved":
+            previous = (
+                (
+                    await self.session.execute(
+                        text(
+                            "select user_id,status from exhibition_submissions where exhibition_id=:id and submission_id=:submission"
+                        ),
+                        {"id": exhibition_id, "submission": submission_id},
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            if previous is not None and previous["status"] == "rejected":
+                await self.check_capacity(exhibition_id, previous["user_id"])
         found = await self.session.scalar(
             text("""update exhibition_submissions set status=:status,rejection_reason=:reason,
             reviewer_user_id=:actor,reviewed_at=now() where exhibition_id=:id and submission_id=:submission

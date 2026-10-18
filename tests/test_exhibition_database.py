@@ -102,6 +102,13 @@ async def test_real_database_exhibition_workflow() -> None:
                     )
                     exhibition_id = exhibition.exhibition_id
                     assert exhibition.participation_open
+                    eligible = await repository.eligible(student, 20, 0, work)
+                    assert exhibition_id in [item.exhibition_id for item in eligible]
+                    assert await repository.eligible(
+                        student, 20, 0, None, exhibition_id
+                    )
+                    with pytest.raises(ExhibitionError, match="published works"):
+                        await repository.eligible(manager, 20, 0, work)
                     historical = await repository.save(
                         manager,
                         ExhibitionInput(
@@ -125,6 +132,12 @@ async def test_real_database_exhibition_workflow() -> None:
                     assert exhibition_id not in [item.exhibition_id for item in past]
                     await repository.submit(exhibition_id, student, work)
                     assert (
+                        await repository.eligible(student, 20, 0, work, exhibition_id)
+                        == []
+                    )
+                    with pytest.raises(ExhibitionError, match="already been submitted"):
+                        await repository.submit(exhibition_id, student, work)
+                    assert (
                         await repository.submissions(
                             exhibition_id, None, "public", 20, 0
                         )
@@ -134,6 +147,20 @@ async def test_real_database_exhibition_workflow() -> None:
                         exhibition_id, student, "mine", 20, 0
                     )
                     assert len(mine) == 1 and mine[0].status == "pending"
+                    assert (
+                        len(
+                            await repository.submissions(
+                                exhibition_id, student, "mine", 20, 0, "pending"
+                            )
+                        )
+                        == 1
+                    )
+                    assert (
+                        await repository.submissions(
+                            exhibition_id, student, "mine", 20, 0, "approved"
+                        )
+                        == []
+                    )
                     submission = mine[0].submission_id
                     await repository.review(
                         exhibition_id,
@@ -161,6 +188,10 @@ async def test_real_database_exhibition_workflow() -> None:
                         exhibition_id, student, manager, "Exhibition rule violation"
                     )
                     assert (
+                        await repository.eligible(student, 20, 0, None, exhibition_id)
+                        == []
+                    )
+                    assert (
                         await repository.submissions(
                             exhibition_id, None, "public", 20, 0
                         )
@@ -178,6 +209,56 @@ async def test_real_database_exhibition_workflow() -> None:
                         )
                         == 1
                     )
+                    # Ten active submissions across both entry paths; rejection frees a slot.
+                    for _ in range(9):
+                        extra = uuid4()
+                        await session.execute(
+                            text("""insert into works(work_id,owner_user_id,type_id,title,storage_path,mime_type,file_size,status)
+                            values(:work,:user,:type,'Quota test',:path,'image/jpeg',100,'published')"""),
+                            {
+                                "work": extra,
+                                "user": student,
+                                "type": type_id,
+                                "path": f"{student}/{extra}.jpg",
+                            },
+                        )
+                        await repository.submit(exhibition_id, student, extra)
+                    assert (
+                        await repository.eligible(student, 20, 0, None, exhibition_id)
+                        == []
+                    )
+                    overflow = uuid4()
+                    await session.execute(
+                        text("""insert into works(work_id,owner_user_id,type_id,title,storage_path,mime_type,file_size,status)
+                        values(:work,:user,:type,'Overflow test',:path,'image/jpeg',100,'published')"""),
+                        {
+                            "work": overflow,
+                            "user": student,
+                            "type": type_id,
+                            "path": f"{student}/{overflow}.jpg",
+                        },
+                    )
+                    with pytest.raises(ExhibitionError, match="at most 10"):
+                        await repository.submit(exhibition_id, student, overflow)
+                    await repository.review(
+                        exhibition_id, submission, manager, "rejected", "Theme mismatch"
+                    )
+                    assert await repository.eligible(
+                        student, 20, 0, overflow, exhibition_id
+                    )
+                    await repository.submit(exhibition_id, student, overflow)
+                    with pytest.raises(ExhibitionError, match="at most 10"):
+                        await repository.review(
+                            exhibition_id, submission, manager, "approved", None
+                        )
+                    assert (
+                        len(
+                            await repository.submissions(
+                                exhibition_id, student, "mine", 20, 0, "pending"
+                            )
+                        )
+                        == 10
+                    )
                     await session.execute(
                         text(
                             "update exhibitions set participation_closes_at=now()-interval '1 minute' where exhibition_id=:id"
@@ -186,6 +267,10 @@ async def test_real_database_exhibition_workflow() -> None:
                     )
                     with pytest.raises(ExhibitionError, match="not open"):
                         await repository.submit(exhibition_id, student, work)
+                    assert (
+                        await repository.eligible(student, 20, 0, None, exhibition_id)
+                        == []
+                    )
             finally:
                 await transaction.rollback()
     finally:

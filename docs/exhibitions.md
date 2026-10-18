@@ -13,6 +13,11 @@ published works while participation is open and they are not blocked.
   past exhibitions have `event_at <= now()` and sort most recent first. Each period
   has its own continuation cursor. The default all preserves descending ordering.
 - `POST /api/v1/exhibitions`: create; requires `exhibitions.manage`.
+- `GET /api/v1/exhibitions/eligible?work_id={optional}&exhibition_id={optional}&cursor=0`:
+  requires current `exhibitions.participate`; paginates only open, not-yet-started,
+  unblocked exhibitions with capacity below ten active entries. Optional work must
+  be owned and published; already-assigned works are excluded, including rejected
+  entries. Optional exhibition ID supports targeted upload preflight.
 - `GET /api/v1/exhibitions/{id}`: public details.
 - `PUT /api/v1/exhibitions/{id}`: replace details; requires management.
 - `POST /api/v1/exhibitions/{id}/submissions`: `{work_id}`, requires
@@ -20,6 +25,8 @@ published works while participation is open and they are not blocked.
 - `GET /api/v1/exhibitions/{id}/submissions?scope=public|mine|manage`: paginated;
   public returns only approved, published works from active, unblocked participants;
   mine requires participation permission, manage requires management permission.
+  Optional `status=pending|approved|rejected` is applied before pagination without
+  weakening scope. Each personal status section uses an independent cursor.
 - `PATCH /api/v1/exhibitions/{id}/submissions/{submission_id}`:
   `{status: approved|rejected, reason?: string}`. Rejections require a reason.
 - `PUT /api/v1/exhibitions/{id}/blocks/{user_id}`: `{reason}`, blocks participation
@@ -47,10 +54,23 @@ Approval controls their exhibition membership only. Rejected entries retain thei
 reason for the owner and managers. A rejected work cannot be submitted twice to the
 same exhibition; managers can reconsider its existing entry.
 
+Both profile assignment and exhibition uploads submit exactly one work ID per
+request. Each user may have at most ten pending or approved entries per exhibition;
+rejection frees capacity. Submission insertion and rejected-entry reapproval check
+this quota while holding the same exhibition row lock, preventing concurrent
+requests from exceeding it. A full quota returns 409. Existing over-limit history
+is not deleted; further submissions/reapprovals are refused until capacity returns.
+Uploading still publishes a normal profile work, then submits its exhibition
+membership; a failed membership request does not delete that profile work.
+
 ## Deployment
 
 Apply `20261018_013_create_exhibitions.sql` before deploying the main backend, then
 deploy the frontend. No new environment variables or IAM privileges are needed.
+For the assignment/quota release, also apply
+`20261018_014_index_active_exhibition_submissions.sql`, which adds a partial index
+on exhibition/user for pending and approved entries without changing existing data.
+Rollback of that index is safe after withdrawing the new application behavior.
 The migration adds three RLS-protected tables, indexed moderation/owner queues,
 cascading submission/work relationships, role permission assignments and a public
 `exhibition-banners` storage bucket with no direct client write policies.

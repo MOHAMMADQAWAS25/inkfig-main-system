@@ -33,6 +33,18 @@ async def list_exhibitions(
     return await service.list(limit, cursor, period)
 
 
+@router.get("/eligible", response_model=ExhibitionPage)
+async def eligible_exhibitions(
+    service: Service,
+    actor: Actor,
+    limit: int = Query(20, ge=1, le=50),
+    cursor: int = Query(0, ge=0, le=100000),
+    work_id: UUID | None = None,
+    exhibition_id: UUID | None = None,
+) -> ExhibitionPage:
+    return await service.eligible(actor, limit, cursor, work_id, exhibition_id)
+
+
 @router.post("", response_model=Exhibition, status_code=201)
 async def create_exhibition(
     data: ExhibitionInput, service: Service, actor: Actor
@@ -65,10 +77,11 @@ async def submissions(
     service: Service,
     actor: Actor,
     scope: Literal["public", "mine", "manage"] = "public",
+    status: Literal["pending", "approved", "rejected"] | None = None,
     limit: int = Query(20, ge=1, le=50),
     cursor: int = Query(0, ge=0, le=100000),
 ) -> SubmissionPage:
-    return await service.submissions(actor, exhibition_id, scope, limit, cursor)
+    return await service.submissions(actor, exhibition_id, scope, limit, cursor, status)
 
 
 @router.patch("/{exhibition_id}/submissions/{submission_id}", status_code=204)

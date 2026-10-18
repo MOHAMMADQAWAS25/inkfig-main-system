@@ -5,6 +5,14 @@ from src.entities.dto.exhibitions import Exhibition, ExhibitionInput, Submission
 
 
 class ExhibitionRepository(Protocol):
+    async def eligible(
+        self,
+        user_id: UUID,
+        limit: int,
+        cursor: int,
+        work_id: UUID | None = None,
+        exhibition_id: UUID | None = None,
+    ) -> list[Exhibition]: ...
     async def allowed(self, user_id: UUID, permission: str) -> bool: ...
     async def list_exhibitions(
         self, limit: int, cursor: int, period: str = "all"
@@ -23,6 +31,7 @@ class ExhibitionRepository(Protocol):
         scope: str,
         limit: int,
         cursor: int,
+        status: str | None = None,
     ) -> list[Submission]: ...
     async def review(
         self,

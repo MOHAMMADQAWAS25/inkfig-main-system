@@ -115,7 +115,49 @@ async def test_public_submission_scope_is_available_to_guests() -> None:
     page = await app.submissions(None, exhibition, "public", 20, 0)
     assert page.items == []
     repo.allowed.assert_not_awaited()
-    repo.submissions.assert_awaited_once_with(exhibition, None, "public", 21, 0)
+    repo.submissions.assert_awaited_once_with(exhibition, None, "public", 21, 0, None)
+
+
+@pytest.mark.asyncio
+async def test_eligible_requires_current_participation_permission_and_paginates() -> (
+    None
+):
+    app, repo = service()
+    repo.allowed.return_value = True
+    actor, work, exhibition = uuid4(), uuid4(), uuid4()
+    repo.eligible.return_value = []
+    page = await app.eligible(actor, 20, 40, work, exhibition)
+    assert page.items == []
+    repo.allowed.assert_awaited_once_with(actor, "exhibitions.participate")
+    repo.eligible.assert_awaited_once_with(actor, 21, 40, work, exhibition)
+
+
+@pytest.mark.asyncio
+async def test_guests_cannot_list_eligible_exhibitions_or_private_status_sections() -> (
+    None
+):
+    app, repo = service()
+    with pytest.raises(ExhibitionError) as caught:
+        await app.eligible(None, 20, 0)
+    assert caught.value.status == 401
+    with pytest.raises(ExhibitionError):
+        await app.submissions(None, uuid4(), "mine", 20, 0, "pending")
+    repo.eligible.assert_not_awaited()
+    repo.submissions.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_private_status_sections_keep_owner_scope_and_independent_cursor() -> (
+    None
+):
+    app, repo = service()
+    repo.allowed.return_value = True
+    repo.submissions.return_value = []
+    actor, exhibition = uuid4(), uuid4()
+    await app.submissions(actor, exhibition, "mine", 20, 40, "approved")
+    repo.submissions.assert_awaited_once_with(
+        exhibition, actor, "mine", 21, 40, "approved"
+    )
 
 
 @pytest.mark.asyncio
