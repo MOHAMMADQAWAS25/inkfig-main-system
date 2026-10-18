@@ -3069,3 +3069,25 @@ Run migration 20261018_016_add_other_work_category.sql through the existing depl
 ### Git
 
 Branch: feature/other-artwork-category. Focused commit, fetch/rebase, branch push and authorized fast-forward main merge/push; exact hashes and outcomes reported in handoff. Previous entries preserved.
+
+## 2026-10-18 - Include artist avatars in exhibition submission records
+
+### Request and changes
+
+Support the administrator review layout with each artist's avatar beside their name. Added nullable artist_avatar_url to Submission and selected avatar_object_path through the existing user_profiles join. Converts the path using the existing encoded public profile-avatar URL helper, removes the internal alias before DTO construction and performs no extra profile query/network request per card.
+
+### Repositories and files
+
+All three repositories checked clean and main pulled. Matching feature/layout-review-refinements branches in inkfig-main-system and inkfig-user-FE; user-system unchanged. Files: exhibition DTO/repository, new test_submission_avatars.py and this log. Incoming Other category changes retained.
+
+### API, database, permissions and scope
+
+Submission lists add optional artist_avatar_url (null without a photo), consistent with existing public artwork/profile avatar metadata. Existing scope/owner/manager authorization, publication/active-account filters, bounded pagination and private withdrawal redaction remain unchanged. No migration, index, storage write, embedding, permissions, configuration or IAM changes. Existing join reused; no import-time clients, clocks or other SnapStart-sensitive state added.
+
+### Verification
+
+85 backend tests passed; one opt-in live database test skipped by default. Mypy passed on src/tests/scripts (71 files), and git diff --check passed. New mocked repository tests cover missing/encoded avatar paths, one-query mapping, active/published filtering and no internal path field in the response. Initial new test used reversed viewer/scope arguments; fixed after mypy identified it and complete tests/type checks rerun successfully. Python verification used an isolated temporary environment because the PATH Python alias was unusable; no project dependencies changed. Existing Starlette/AnyIO deprecation warning remains. No live database or storage writes performed.
+
+### Deployment and Git
+
+Deploy main-system first through its existing workflow, then frontend layout changes. No migration or user-system deployment needed; frontend tolerates older responses with initials. Branch: feature/layout-review-refinements. Fetch/rebase before branch push, authorized fast-forward main merge/push; exact commit, push/conflicts and deployment outcomes reported in handoff. Prior log entries preserved.

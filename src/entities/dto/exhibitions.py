@@ -94,6 +94,7 @@ class Submission(BaseModel):
     work_id: UUID
     user_id: UUID
     artist_name: str
+    artist_avatar_url: str | None = None
     title: str
     image_url: str
     status: str

@@ -242,7 +242,8 @@ class SqlAlchemyExhibitionRepository:
             (
                 await self.session.execute(
                     text(f"""
-            select s.*,w.title,w.storage_path,p.full_name artist_name from exhibition_submissions s
+            select s.*,w.title,w.storage_path,p.full_name artist_name,
+                   p.avatar_object_path as artist_avatar_path from exhibition_submissions s
             join works w on w.work_id=s.work_id join user_profiles p on p.user_id=s.user_id
             join user_accounts a on a.user_id=s.user_id
             where s.exhibition_id=:id and {condition} and a.account_status='active' and w.status='published'
@@ -265,6 +266,7 @@ class SqlAlchemyExhibitionRepository:
         result = []
         for row in rows:
             data = dict(row)
+            avatar_path = data.pop("artist_avatar_path", None)
             if scope == "public":
                 for key in (
                     "withdrawal_status",
@@ -274,7 +276,11 @@ class SqlAlchemyExhibitionRepository:
                 ):
                     data[key] = None
             result.append(
-                Submission(**data, image_url=self.works.public_url(row["storage_path"]))
+                Submission(
+                    **data,
+                    image_url=self.works.public_url(row["storage_path"]),
+                    artist_avatar_url=self.works.profile_avatar_url(avatar_path),
+                )
             )
         return result
 
