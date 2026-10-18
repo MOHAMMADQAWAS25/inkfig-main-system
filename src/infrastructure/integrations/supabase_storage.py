@@ -37,6 +37,11 @@ class SupabaseWorkStorage:
     def public_url(self, path: str) -> str:
         return f"{self._url}/storage/v1/object/public/{self._bucket}/{quote(path, safe='/')}"
 
+    def profile_avatar_url(self, path: str | None) -> str | None:
+        if not path:
+            return None
+        return f"{self._url}/storage/v1/object/public/profile-avatars/{quote(path, safe='/')}"
+
     async def download_image(self, path: str) -> bytes:
         endpoint = (
             f"{self._url}/storage/v1/object/{self._bucket}/{quote(path, safe='/')}"

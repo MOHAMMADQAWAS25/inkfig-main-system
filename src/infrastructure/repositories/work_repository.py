@@ -75,6 +75,7 @@ class SqlAlchemyWorkRepository:
             )
             select page.*,
                    coalesce(p.full_name, 'InkFig artist') as artist_name,
+                   p.avatar_object_path as artist_avatar_path,
                    (select count(*) from work_likes l
                     join user_accounts la on la.user_id = l.user_id
                     where l.work_id = page.work_id and la.account_status = 'active') as like_count,
@@ -88,7 +89,8 @@ class SqlAlchemyWorkRepository:
         rows = (await self._session.execute(statement, parameters)).mappings()
         return [
             FeedCardResponse(
-                **{key: value for key, value in row.items() if key != "storage_path"},
+                **{key: value for key, value in row.items() if key not in ("storage_path", "artist_avatar_path")},
+                artist_avatar_url=self._storage.profile_avatar_url(row.artist_avatar_path),
                 image_url=self._storage.public_url(row.storage_path),
             )
             for row in rows
@@ -226,6 +228,7 @@ class SqlAlchemyWorkRepository:
                 w.work_id,
                 w.owner_user_id,
                 coalesce(p.full_name, 'InkFig artist') as artist_name,
+                p.avatar_object_path as artist_avatar_path,
                 w.type_id,
                 t.name_en,
                 t.name_ar,
@@ -258,7 +261,7 @@ class SqlAlchemyWorkRepository:
             left join work_likes l on l.work_id = w.work_id
               and exists (select 1 from user_accounts liker_account where liker_account.user_id = l.user_id and liker_account.account_status = 'active')
             where {" and ".join(filters)}
-            group by w.work_id, p.full_name, t.type_id
+            group by w.work_id, p.full_name, p.avatar_object_path, t.type_id
             order by w.created_at desc, w.work_id desc
             limit :limit
             """
@@ -269,6 +272,7 @@ class SqlAlchemyWorkRepository:
                 work_id=r.work_id,
                 owner_user_id=r.owner_user_id,
                 artist_name=r.artist_name,
+                artist_avatar_url=self._storage.profile_avatar_url(r.artist_avatar_path),
                 type_id=r.type_id,
                 type_name_en=r.name_en,
                 type_name_ar=r.name_ar,
@@ -531,6 +535,7 @@ class SqlAlchemyWorkRepository:
                     f"""
                     select w.work_id, w.owner_user_id,
                            coalesce(p.full_name, 'InkFig artist') as artist_name,
+                           p.avatar_object_path as artist_avatar_path,
                            w.type_id, t.name_en, t.name_ar, w.title, w.description,
                            coalesce((select jsonb_agg(jsonb_build_object('url', wl.url, 'label', wl.label) order by wl.position)
                                      from work_links wl where wl.work_id = w.work_id), '[]'::jsonb) as links,
@@ -550,7 +555,7 @@ class SqlAlchemyWorkRepository:
                       and exists(select 1 from user_accounts la where la.user_id = l.user_id and la.account_status = 'active')
                     where {" and ".join(filters)}
                       and (1 - (e.embedding <=> cast(:embedding as extensions.vector))) >= :min_similarity
-                    group by w.work_id, p.full_name, t.type_id, e.embedding
+                    group by w.work_id, p.full_name, p.avatar_object_path, t.type_id, e.embedding
                     order by e.embedding <=> cast(:embedding as extensions.vector), w.created_at desc
                     limit :limit
                     offset :offset
@@ -564,6 +569,7 @@ class SqlAlchemyWorkRepository:
                 work_id=r.work_id,
                 owner_user_id=r.owner_user_id,
                 artist_name=r.artist_name,
+                artist_avatar_url=self._storage.profile_avatar_url(r.artist_avatar_path),
                 type_id=r.type_id,
                 type_name_en=r.name_en,
                 type_name_ar=r.name_ar,

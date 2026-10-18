@@ -3029,3 +3029,21 @@ Hide exhibition works before launch, provide owner/manager record lists with sta
 ### Notes
 
 The architecture skill preserved DTO/service/interface/infrastructure boundaries; atomic ownership/state rules are checked under transaction locks. Deletion here means exhibition membership, not the underlying artwork. Supabase testing preserved original works and audit reasons while exercising real SQL. No exhibition WebSocket behavior added; existing banner cleanup limitation unchanged.
+
+## 2026-10-18 - Creator avatar metadata for artwork cards
+
+### Request and changes
+
+Added optional artist_avatar_url to work, semantic-search and infinite-feed responses. Existing profile joins select avatar_object_path and construct its public profile-avatars URL using the shared storage origin and encoded path. Grouped queries include the avatar path. This supplies creator pictures without per-card profile HTTP requests; null paths remain null and active-owner visibility is retained.
+
+### Repositories and deployment
+
+Matching feature/gallery-creator-rows branches in main-system and user-FE. Deploy main-system before frontend creator rows. No migration, permissions, secrets, environment variables or SnapStart initialization change.
+
+### Verification
+
+Added SQL selection and encoded/missing avatar URL regression coverage. Local python -m mypy src tests could not execute because Python is unavailable; pytest also requires CI. git diff --check passed. Frontend 216 tests and strict TypeScript/Vite build passed, including stable masonry appends with identity-row geometry.
+
+### Git
+
+Branch: feature/gallery-creator-rows. Fetch/rebase before push and authorized fast-forward main merge/push. Commit and push outcomes reported in handoff; previous entries preserved.

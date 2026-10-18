@@ -35,6 +35,7 @@ async def test_feed_sql_uses_bound_composite_key_and_limits_before_counting() ->
     assert "offset" not in query.lower()
     assert "description" not in query
     assert "work_links" not in query
+    assert "p.avatar_object_path as artist_avatar_path" in query
     assert parameters == {
         "viewer": viewer,
         "limit": 21,
@@ -43,3 +44,9 @@ async def test_feed_sql_uses_bound_composite_key_and_limits_before_counting() ->
         "type_code": "digital-art",
         "owner_id": owner,
     }
+
+
+def test_creator_avatar_urls_preserve_missing_and_encoded_paths() -> None:
+    storage = SupabaseWorkStorage("https://storage.test", "unused", "works")
+    assert storage.profile_avatar_url(None) is None
+    assert storage.profile_avatar_url("user/photo one.jpg") == "https://storage.test/storage/v1/object/public/profile-avatars/user/photo%20one.jpg"

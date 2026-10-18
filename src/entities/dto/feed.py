@@ -17,6 +17,7 @@ class FeedCardResponse(BaseModel):
     work_id: UUID
     owner_user_id: UUID
     artist_name: str
+    artist_avatar_url: str | None = None
     type_id: UUID
     type_name_en: str
     type_name_ar: str
