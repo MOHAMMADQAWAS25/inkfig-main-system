@@ -3047,3 +3047,25 @@ Added SQL selection and encoded/missing avatar URL regression coverage. Local py
 ### Git
 
 Branch: feature/gallery-creator-rows. Fetch/rebase before push and authorized fast-forward main merge/push. Commit and push outcomes reported in handoff; previous entries preserved.
+
+## 2026-10-18 - Add Other artwork category
+
+### Request and changes
+
+Added the active Other / أخرى work type with stable code other through a new idempotent seed migration. Existing categories, work records, APIs, authorization and SnapStart behavior are unchanged. Added a focused migration regression test.
+
+### Repositories and files
+
+inkfig-main-system: migrations/20261018_016_add_other_work_category.sql, tests/test_other_work_category.py and this log. Matching frontend branch adds the homepage filter and localized labels; user-system unchanged.
+
+### Verification
+
+git diff --check passed. Python pytest and mypy could not run because Python is unavailable locally; CI verification required. Frontend 228 tests and TypeScript/Vite production build passed.
+
+### Deployment
+
+Run migration 20261018_016_add_other_work_category.sql through the existing deployment migration runner before deploying the frontend filter. Existing types API supplies the new category to upload forms; no environment or permission changes. Live database migration not executed locally.
+
+### Git
+
+Branch: feature/other-artwork-category. Focused commit, fetch/rebase, branch push and authorized fast-forward main merge/push; exact hashes and outcomes reported in handoff. Previous entries preserved.
