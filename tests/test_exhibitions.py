@@ -7,7 +7,12 @@ import pytest
 from pydantic import ValidationError
 
 from src.app.services.exhibition_service import ExhibitionService
-from src.entities.dto.exhibitions import ExhibitionError, ExhibitionInput, ReviewInput
+from src.entities.dto.exhibitions import (
+    Exhibition,
+    ExhibitionError,
+    ExhibitionInput,
+    ReviewInput,
+)
 from src.entities.repositories.exhibitions import ExhibitionRepository
 from src.entities.repositories.works import WorkMediaProcessor, WorkStorage
 
@@ -53,6 +58,21 @@ def test_rejection_requires_a_real_reason() -> None:
         == "Does not fit the theme"
     )
     assert ReviewInput(status="approved").reason is None
+
+
+@pytest.mark.asyncio
+async def test_exhibition_sections_preserve_their_own_pagination_scope() -> None:
+    app, repo = service()
+    item = Exhibition(
+        **data().model_dump(),
+        exhibition_id=uuid4(),
+        creator_user_id=uuid4(),
+        created_at=datetime.now(UTC),
+    )
+    repo.list_exhibitions.return_value = [item, item]
+    page = await app.list(1, 20, "past")
+    repo.list_exhibitions.assert_awaited_once_with(2, 20, "past")
+    assert page.items == [item] and page.next_cursor == 21
 
 
 @pytest.mark.asyncio

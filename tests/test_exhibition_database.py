@@ -102,6 +102,27 @@ async def test_real_database_exhibition_workflow() -> None:
                     )
                     exhibition_id = exhibition.exhibition_id
                     assert exhibition.participation_open
+                    historical = await repository.save(
+                        manager,
+                        ExhibitionInput(
+                            name="Rollback-only past exhibition",
+                            description="Never committed",
+                            event_at=now - timedelta(days=1),
+                            participation_opens_at=now - timedelta(days=3),
+                            participation_closes_at=now - timedelta(days=2),
+                        ),
+                        None,
+                    )
+                    upcoming = await repository.list_exhibitions(50, 0, "upcoming")
+                    past = await repository.list_exhibitions(50, 0, "past")
+                    assert exhibition_id in [item.exhibition_id for item in upcoming]
+                    assert historical.exhibition_id not in [
+                        item.exhibition_id for item in upcoming
+                    ]
+                    assert historical.exhibition_id in [
+                        item.exhibition_id for item in past
+                    ]
+                    assert exhibition_id not in [item.exhibition_id for item in past]
                     await repository.submit(exhibition_id, student, work)
                     assert (
                         await repository.submissions(

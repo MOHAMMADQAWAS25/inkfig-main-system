@@ -31,8 +31,10 @@ class ExhibitionService:
             )
         return user_id
 
-    async def list(self, limit: int, cursor: int) -> ExhibitionPage:
-        rows = await self.repository.list_exhibitions(limit + 1, cursor)
+    async def list(
+        self, limit: int, cursor: int, period: str = "all"
+    ) -> ExhibitionPage:
+        rows = await self.repository.list_exhibitions(limit + 1, cursor, period)
         return ExhibitionPage(
             items=rows[:limit],
             next_cursor=cursor + limit if len(rows) > limit else None,

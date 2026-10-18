@@ -50,12 +50,18 @@ class SqlAlchemyExhibitionRepository:
             < data["participation_closes_at"],
         )
 
-    async def list_exhibitions(self, limit: int, cursor: int) -> list[Exhibition]:
+    async def list_exhibitions(
+        self, limit: int, cursor: int, period: str = "all"
+    ) -> list[Exhibition]:
+        condition = {"upcoming": "event_at > now()", "past": "event_at <= now()"}.get(
+            period, "true"
+        )
+        order = "asc" if period == "upcoming" else "desc"
         rows = (
             (
                 await self.session.execute(
                     text(
-                        "select * from exhibitions order by event_at desc,exhibition_id desc limit :limit offset :cursor"
+                        f"select * from exhibitions where {condition} order by event_at {order},exhibition_id {order} limit :limit offset :cursor"
                     ),
                     {"limit": limit, "cursor": cursor},
                 )

@@ -8,7 +8,10 @@ published works while participation is open and they are not blocked.
 
 ## API
 
-- `GET /api/v1/exhibitions?limit=20&cursor=0`: public listing.
+- `GET /api/v1/exhibitions?limit=20&cursor=0&period=all|upcoming|past`: public
+  listing. Upcoming exhibitions have `event_at > now()` and sort nearest first;
+  past exhibitions have `event_at <= now()` and sort most recent first. Each period
+  has its own continuation cursor. The default all preserves descending ordering.
 - `POST /api/v1/exhibitions`: create; requires `exhibitions.manage`.
 - `GET /api/v1/exhibitions/{id}`: public details.
 - `PUT /api/v1/exhibitions/{id}`: replace details; requires management.
