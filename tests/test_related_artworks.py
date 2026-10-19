@@ -2,12 +2,13 @@ import base64
 import os
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any, cast
 from uuid import UUID, uuid4
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import text
+from sqlalchemy import create_engine, text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from src.app.services.related_artworks_service import RelatedArtworksService
 from src.entities.dto.feed import FeedCardResponse
@@ -77,12 +78,84 @@ async def test_unavailable_source_and_invalid_limits_fail_closed() -> None:
     assert not repository.calls
 
 
-def test_related_sql_preserves_visibility_model_compatibility_and_fallback() -> None:
+def test_related_sql_requires_threshold_without_category_fallback_or_ranking_bias() -> None:
     source = (Path(__file__).parents[1] / "src/infrastructure/repositories/related_artworks_repository.py").read_text(encoding="utf-8")
     for fragment in ["w.work_id<>:id", "w.status='published'", "a.account_status='active'", "e.model_name=source.model_name",
-                     "where similarity>=0.20 or same_type", "floor(similarity/0.02)", "limit :limit offset :offset", "cast(:viewer as uuid)"]:
+                     "where similarity>=0.20", "order by similarity desc, created_at desc, work_id desc",
+                     "order by page.similarity desc, page.created_at desc, page.work_id desc",
+                     "else null end as similarity", "limit :limit offset :offset", "cast(:viewer as uuid)"]:
         assert fragment in source
+    for removed in ["same_type", "source.type_id", "floor(", "tier"]:
+        assert removed not in source
     assert "embed_image" not in source
+
+
+@pytest.mark.asyncio
+async def test_no_qualifying_matches_returns_empty_page_without_continuation() -> None:
+    repository = Repository()
+    repository.rows = []
+    page = await RelatedArtworksService(repository).get(uuid4(), None)
+    assert page.items == []
+    assert page.next_cursor is None
+    assert len(repository.calls) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("source_embedding", [True, False])
+async def test_query_filters_weak_missing_and_incompatible_vectors_without_category_bias(source_embedding: bool) -> None:
+    # Exercise the real relational query offline. Only pgvector's distance operator
+    # is replaced with a deterministic SQLite function; this is not a PG integration test.
+    engine = create_engine("sqlite://")
+    source_id = uuid4()
+    strongest, closer_category = uuid4(), uuid4()
+    try:
+        with engine.connect() as connection:
+            raw = connection.connection.driver_connection
+            assert raw is not None
+            raw.create_function("cosine_distance", 2, lambda candidate, source: float(candidate) if candidate is not None and source is not None else None)
+            for statement in [
+                "create table works (work_id text, owner_user_id text, type_id text, title text, storage_path text, mime_type text, created_at text, media text, status text)",
+                "create table user_accounts (user_id text, account_status text)",
+                "create table work_embeddings (work_id text, embedding text, model_name text)",
+                "create table work_types (type_id text, name_en text, name_ar text)",
+                "create table user_profiles (user_id text, full_name text, avatar_object_path text)",
+                "create table work_likes (work_id text, user_id text)",
+                "create table work_saves (work_id text, user_id text)",
+            ]:
+                connection.execute(text(statement))
+            owner, same_category, other_category = uuid4(), uuid4(), uuid4()
+            connection.execute(text("insert into user_accounts values (:owner, 'active')"), {"owner": str(owner)})
+            for category in [same_category, other_category]:
+                connection.execute(text("insert into work_types values (:id, 'Art', 'Art')"), {"id": str(category)})
+            fixtures = [
+                (source_id, same_category, "0", "current", "published"),
+                (strongest, other_category, "0.10", "current", "published"),
+                (closer_category, same_category, "0.15", "current", "published"),
+                (uuid4(), same_category, "0.81", "current", "published"),
+                (uuid4(), same_category, None, "current", "published"),
+                (uuid4(), same_category, "0.01", "different-model", "published"),
+                (uuid4(), same_category, "0.01", "current", "draft"),
+            ]
+            for work_id, category, distance, model, status in fixtures:
+                connection.execute(text("insert into works values (:id,:owner,:category,'Artwork','art.png','image/png','2026-10-01T00:00:00Z',null,:status)"),
+                                   {"id": str(work_id), "owner": str(owner), "category": str(category), "status": status})
+                if distance is not None and (work_id != source_id or source_embedding):
+                    connection.execute(text("insert into work_embeddings values (:id,:distance,:model)"), {"id": str(work_id), "distance": distance, "model": model})
+
+            async def execute(statement: Any, parameters: dict[str, Any]) -> Any:
+                sql = str(statement).replace("e.embedding <=> source.embedding", "cosine_distance(e.embedding, source.embedding)")
+                return connection.execute(text(sql), {key: value.isoformat() if isinstance(value, datetime) else str(value) if isinstance(value, UUID) else value for key, value in parameters.items()})
+
+            session = MagicMock(spec=AsyncSession)
+            session.execute = AsyncMock(side_effect=execute)
+            storage = MagicMock(spec=SupabaseWorkStorage)
+            storage.public_url.return_value = "https://example.com/art.png"
+            storage.profile_avatar_url.return_value = None
+            repository = SqlAlchemyRelatedArtworksRepository(cast(AsyncSession, session), storage)
+            rows = await repository.list_related(source_id, None, datetime.now(UTC), 0, 20)
+            assert [item.work_id for item in rows] == ([strongest, closer_category] if source_embedding else [])
+    finally:
+        engine.dispose()
 
 
 @pytest.mark.parametrize("status", [200, 400, 404])
@@ -131,6 +204,18 @@ async def test_related_query_against_real_database_is_read_only() -> None:
                     assert len(rows) <= 20
                     assert all(item.work_id != work_id for item in rows)
                     assert len({item.work_id for item in rows}) == len(rows)
+                    # Independently verify exact threshold/model eligibility and score order.
+                    expected = (await connection.execute(text("""
+                        select w.work_id, 1-(e.embedding <=> source.embedding) as similarity
+                        from works w join user_accounts a on a.user_id=w.owner_user_id
+                        join work_embeddings e on e.work_id=w.work_id
+                        cross join work_embeddings source
+                        where source.work_id=:id and e.model_name=source.model_name
+                            and w.work_id<>:id and w.status='published' and a.account_status='active'
+                            and 1-(e.embedding <=> source.embedding)>=0.20
+                        order by similarity desc, w.created_at desc, w.work_id desc limit 20
+                    """), {"id": work_id})).scalars().all()
+                    assert [item.work_id for item in rows] == list(expected)
             finally:
                 await transaction.rollback()
     finally:

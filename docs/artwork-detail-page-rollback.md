@@ -15,3 +15,11 @@ Adds `GET /api/v1/works/{work_id}/related` through a dedicated DTO, repository p
 Exact ticket commit hashes are reported in the final handoff. Backend commit subject: `Add stored-vector related artwork feed`. Frontend subject: `Add routed artwork details and related masonry feed`.
 
 If the user requests reversal, revert only this ticket's commits with new commits, preserving unrelated work. Restore/redeploy frontend first, then remove/redeploy the optional backend endpoint. No migration, data restoration, image deletion, bucket change or secret rotation is needed. Do not reset main to the baseline or force-push. Resolve any later overlapping changes deliberately, append rollback logs, rerun tests/types/builds, and follow the established Git workflow. Retain historical feature-log entries.
+
+## 2026-10-20 - Similarity-only follow-up
+
+Branch: `fix/related-artwork-similarity`. Pre-change backend baseline: `8a0cc5a80d218ec581870ea44621e3b801eb93af`.
+
+This follow-up supersedes the original ranking described above: only model-compatible stored cosine similarity >=0.20 qualifies. No category fallback or category/score-band ranking remains; results sort by exact similarity descending, then creation date and ID. Missing/incompatible embeddings or no qualifying matches return an empty page with no continuation, using the frontend's existing localized empty message. No frontend changes or database migration.
+
+Changed files: related artwork SQL repository, its tests, this rollback record and AGENT_FEATURE_LOG.md. To undo only this follow-up, revert the commit titled `Require visual similarity for related artworks` and redeploy main-system. This restores the earlier fallback without removing the dedicated artwork page. Exact commit hash and push/deployment results are reported in the handoff.

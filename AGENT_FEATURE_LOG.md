@@ -3164,3 +3164,29 @@ Optional existing viewer authentication; source 404, invalid cursor 400 and limi
 ### Git and deployment
 
 Matching feature/artwork-detail-page branches in main-system and user-FE; user-system unchanged. Subject: Add stored-vector related artwork feed. Fetch/rebase before push, then previously authorized fast-forward main merge/push. Deploy existing main-system workflow first, frontend next; no migration prerequisite. Exact hashes, push/merge/conflict and deployment outcomes reported in final handoff; historical entries retained. Computer-use visual review was blocked by browser URL safety verification and is not claimed.
+
+## 2026-10-20 - Require visual similarity for related artworks
+
+### Request and changes
+
+Only display related artworks with stored cosine similarity >=0.20; otherwise use the existing localized no-related-artwork state. Removed same-category eligibility and score-band/category ranking from the SQL repository. Exact descending similarity now determines order, with existing creation-date/ID tie breakers. Missing or incompatible embeddings cannot qualify. Current artwork exclusion, published/active-owner visibility, personalized interactions, snapshot/offset pagination and response shape remain unchanged.
+
+### Repositories and files
+
+Only inkfig-main-system changed: src/infrastructure/repositories/related_artworks_repository.py, tests/test_related_artworks.py, docs/artwork-detail-page-rollback.md and this log. Clean main pulled before edits; baseline 8a0cc5a80d218ec581870ea44621e3b801eb93af. Frontend inspected/pulled but unchanged: Feed already displays artwork.noRelated when loading completes with zero items, in English/Arabic. User-system unchanged. No design or masonry changes.
+
+### API, database, permissions and SnapStart
+
+GET /api/v1/works/{id}/related retains its API contract, optional existing authentication and private/no-store cache policy. No migration, data/storage mutations, permission, dependency, configuration, IAM or provider request changes. Existing indexes and exact vector comparison retained; no additional index needed for this predicate/ranking adjustment. Request-time clocks/dependencies and future SnapStart compatibility preserved.
+
+### Verification
+
+121 pytest tests passed, two existing opt-in database tests skipped; mypy src/tests passed on 77 files and git diff --check passed. Added offline execution of the actual relational SQL with only the pgvector operator replaced by a deterministic SQLite function: excludes weak same-category, missing and incompatible vectors and drafts, orders stronger cross-category matches first, and returns empty without a source embedding. Service test verifies no matches yields items=[] and next_cursor=null. Updated SQL guards and extended opt-in read-only PostgreSQL test to independently compare eligible IDs/order. SQLite checks do not claim PostgreSQL integration; DATABASE_URL remains unavailable locally. Existing Starlette/AnyIO deprecation warning remains. No production fixtures/writes used for verification.
+
+### Deployment and rollback
+
+Backend-only existing main-system workflow; no frontend/user-system deployment or migration. Record live read-only smoke check and workflow outcome in final handoff. Roll back only this follow-up commit to restore category fallback while retaining the artwork page; rollback document preserves the original ticket record and adds this follow-up baseline/scope. Do not reset or force-push.
+
+### Git
+
+Branch: fix/related-artwork-similarity. Commit subject: Require visual similarity for related artworks. Fetch/rebase newest origin/main before branch push, then previously authorized fast-forward main merge/push. Exact commit hash, push/merge/conflict and deployment outcomes reported in final handoff. Historical feature-log entries unchanged.
