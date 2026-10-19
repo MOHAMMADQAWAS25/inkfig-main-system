@@ -20,6 +20,14 @@ published works while participation is open and they are not blocked.
   entries. Optional exhibition ID supports targeted upload preflight.
 - `GET /api/v1/exhibitions/{id}`: public details.
 - `PUT /api/v1/exhibitions/{id}`: replace details; requires management.
+- `DELETE /api/v1/exhibitions/{id}`: permanently delete; requires a current active,
+  verified administrator/system-administrator with `exhibitions.manage` (not a
+  supervisor). Returns 204. Serializes with submissions/reviews and removes the
+  assigned banner plus its derived variants before committing deletion. Existing
+  foreign keys cascade submissions, blocks and withdrawal audits. Artists' original
+  works, their media and embeddings are preserved. Cleanup failure returns 503 and
+  keeps the exhibition retryable. Storage and SQL are not a distributed transaction:
+  if SQL fails after banner removal, retry deletion; no success is reported.
 - `POST /api/v1/exhibitions/{id}/submissions`: `{work_id}`, requires
   `exhibitions.participate`; returns 204 with a pending submission.
 - `GET /api/v1/exhibitions/{id}/submissions?scope=public|mine|manage`: paginated;

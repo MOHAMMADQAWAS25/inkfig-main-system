@@ -72,6 +72,13 @@ async def submit(
     await service.submit(actor, exhibition_id, data.work_id)
 
 
+@router.delete("/{exhibition_id}", status_code=204)
+async def delete_exhibition(
+    exhibition_id: UUID, service: Service, actor: Actor
+) -> None:
+    await service.delete(actor, exhibition_id)
+
+
 @router.get("/{exhibition_id}/submissions", response_model=SubmissionPage)
 async def submissions(
     exhibition_id: UUID,

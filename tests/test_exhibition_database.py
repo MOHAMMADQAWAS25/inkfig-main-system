@@ -192,6 +192,16 @@ async def test_real_database_exhibition_workflow() -> None:
                         await repository.eligible(student, 20, 0, None, exhibition_id)
                         == []
                     )
+                    # No banner is assigned to this rollback-only fixture, so
+                    # deletion exercises cascades without touching real storage.
+                    await repository.block(exhibition_id, student, manager, "Deletion cascade check")
+                    await repository.delete(exhibition_id)
+                    for table in ("exhibitions", "exhibition_submissions", "exhibition_blocks", "exhibition_withdrawal_audits"):
+                        assert await session.scalar(
+                            text(f"select count(*) from {table} where exhibition_id=:id"),
+                            {"id": exhibition_id},
+                        ) == 0
+                    assert await session.scalar(text("select count(*) from works where work_id=:id"), {"id": work}) == 1
                     assert (
                         await repository.submissions(
                             exhibition_id, None, "public", 20, 0

@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
+import httpx
 from sqlalchemy import text
 from sqlalchemy.engine import RowMapping
 from sqlalchemy.exc import IntegrityError
@@ -14,6 +15,7 @@ from src.entities.dto.exhibitions import (
     Submission,
 )
 from src.infrastructure.integrations.supabase_storage import SupabaseWorkStorage
+from src.entities.exceptions.works import StorageDeleteError
 
 
 class SqlAlchemyExhibitionRepository:
@@ -49,6 +51,37 @@ class SqlAlchemyExhibitionRepository:
             <= now
             < data["participation_closes_at"],
         )
+
+    async def is_administrator(self, user_id: UUID) -> bool:
+        return bool(await self.session.scalar(text("""
+            select exists(select 1 from user_roles
+            where user_id=:user and role_code in ('admin','system_administrator'))
+        """), {"user": user_id}))
+
+    async def delete(self, exhibition_id: UUID) -> None:
+        # Serialize with submission/review/banner operations. Storage is removed
+        # before committing SQL so cleanup failures leave a retryable exhibition.
+        try:
+            await self.lock(exhibition_id)
+            path = await self.session.scalar(
+                text("select banner_path from exhibitions where exhibition_id=:id"),
+                {"id": exhibition_id},
+            )
+            if path:
+                await self.banners.delete_object(str(path))
+            await self.session.execute(
+                text("delete from exhibitions where exhibition_id=:id"),
+                {"id": exhibition_id},
+            )
+            # Foreign keys cascade memberships (including withdrawal metadata)
+            # and blocks; original works, their media and embeddings are retained.
+            await self.session.commit()
+        except (StorageDeleteError, httpx.HTTPError) as error:
+            await self.session.rollback()
+            raise ExhibitionError(503, "Exhibition banner cleanup failed. Please retry deletion.") from error
+        except Exception:
+            await self.session.rollback()
+            raise
 
     async def list_exhibitions(
         self, limit: int, cursor: int, period: str = "all"

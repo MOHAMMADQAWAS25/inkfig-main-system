@@ -3091,3 +3091,29 @@ Submission lists add optional artist_avatar_url (null without a photo), consiste
 ### Deployment and Git
 
 Deploy main-system first through its existing workflow, then frontend layout changes. No migration or user-system deployment needed; frontend tolerates older responses with initials. Branch: feature/layout-review-refinements. Fetch/rebase before branch push, authorized fast-forward main merge/push; exact commit, push/conflicts and deployment outcomes reported in handoff. Prior log entries preserved.
+
+## 2026-10-19 - Administrator exhibition deletion
+
+### Request and changes
+
+Add an administrator option to permanently delete an exhibition alongside the submission-interface refinements. Added DELETE /api/v1/exhibitions/{id}, service/repository ports and implementation. Checks current active/verified management permission and current database role admin/system_administrator; supervisors cannot delete. Locks the exhibition row, removes its assigned banner and derived variants through the existing storage helper before committing SQL deletion. Existing cascades remove submissions, participation blocks and withdrawal audits. Original artists' works, media and embeddings are deliberately preserved. Storage/network cleanup failures roll back SQL and return retryable 503; missing exhibition returns 404. Storage/SQL cannot be atomic: a later SQL failure may leave a removed banner until deletion is retried, documented explicitly.
+
+### Repositories and files
+
+All three repositories checked clean and main pulled before changes. Matching feature/exhibition-interaction-polish branches in main-system and user-FE; user-system unchanged. Files: exhibition route, service, repository protocol/implementation, docs/exhibitions.md, new test_exhibition_delete.py, extended opt-in database workflow and this log.
+
+### API, database, permissions and scope
+
+New authenticated DELETE endpoint returns 204 with no body; 401/403/404/503 errors retain the standard detail response. No migration or new permission seed: existing foreign keys and role/permission tables suffice. No new dependencies, configuration, secrets, IAM or import-time clients/state; SnapStart compatibility preserved. No real exhibition, artwork or production storage deleted during verification.
+
+### Verification
+
+99 tests passed; one opt-in rolled-back database integration test skipped. Mypy src/tests passed on 71 files; git diff --check passed. New tests cover anonymous/denied/supervisor/admin authorization, endpoint contracts, banner-before-SQL ordering, no-banner deletion, missing exhibition, rollback on storage/SQL errors and existing cascade schema. Opt-in workflow additionally checks actual cascade deletion and original-work preservation when explicitly enabled. Initial test type-inference issue corrected and full checks rerun. Existing Starlette/AnyIO deprecation warning remains.
+
+### Deployment
+
+Deploy main-system through existing GitHub Actions before companion frontend publication. No migration or user-system deployment required. Production workflow result reported in final handoff; local SAM deployment not performed.
+
+### Git
+
+Branch: feature/exhibition-interaction-polish. Commit message: Add administrator-only exhibition deletion. Fetch/rebase before branch push, then explicitly authorized fast-forward main merge/push. Exact commit hash, push/merge/conflict and deployment outcomes reported in final handoff. Earlier log entries preserved.

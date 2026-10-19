@@ -86,6 +86,12 @@ class ExhibitionService:
         user = await self.authorize(actor, "exhibitions.participate")
         await self.repository.submit(exhibition_id, user, work_id)
 
+    async def delete(self, actor: UUID | None, exhibition_id: UUID) -> None:
+        user = await self.authorize(actor, "exhibitions.manage")
+        if not await self.repository.is_administrator(user):
+            raise ExhibitionError(403, "Only administrators may delete exhibitions.")
+        await self.repository.delete(exhibition_id)
+
     async def submissions(
         self,
         actor: UUID | None,
