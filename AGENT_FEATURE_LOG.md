@@ -3142,3 +3142,25 @@ New GET /api/v1/exhibitions/pending-counts requires exhibitions.manage; returns 
 ### Frontend, deployment and limitations
 
 Manager trophy/mobile-menu and per-exhibition Review submissions controls show pending-action counts; student bell shows unread notifications. Lists subscribe only while mounted/open, preserve active filters and refresh after reconnect. Badge summary requests are intentionally allowed on other pages. Deploy user-system migration/API first, then main-system, then frontend via main workflows; no production fixture records or messages retained. Delivery is best effort, not a durable WebSocket outbox; canonical REST state and saved notifications recover on reconnect/open.
+
+## 2026-10-19 - Stored-vector related artwork feed
+
+### Request, baseline and rollback record
+
+Support dedicated public artwork pages with bounded related homepage cards and preserve a reversible implementation record. Clean main pulled first. Main-system baseline b11e077f0e60abb25a6a044ce5f63df3de1fb58c; frontend baseline c925263f8ec2bdc74a911c52bff1e9dc62c22c08. docs/artwork-detail-page-rollback.md records change inventory and safe revert procedure: frontend first, backend second, only ticket commits, no reset/force push or database rollback. Exact hashes in handoff.
+
+### Changes and files
+
+Added DTO/repository protocol/service/SQL repository for GET /api/v1/works/{work_id}/related, dependency wiring and route, tests/test_related_artworks.py, rollback document and this log. Existing stored model-compatible pgvector cosine scores >=0.20 rank first; 0.02 bands prefer matching categories among near scores, then exact similarity and stable created_at/work_id order. Same-category results provide fallback when vectors are absent. Source and results must be published and owners active; current work excluded. Lightweight cards expose existing public avatar/media/category fields, active-user like count and personalized liked/saved state.
+
+### API, database, permissions and SnapStart
+
+Optional existing viewer authentication; source 404, invalid cursor 400 and limit 1..50. Private/no-store response with Cookie/Authorization Vary. Source-bound snapshot/offset cursor limits stored offset to 10000, bounds parsing and limits page query. Snapshot excludes newer uploads; deletions/edits/backfills can shift live ranked offsets, client deduplicates. Exact scoring scans eligible vectors, so production query cost should be monitored as the catalogue grows; no approximate index performance claim. No migrations, provider requests, new grants/dependencies/environment/IAM, storage writes or table mutations. Sessions/storage resolve through existing request-time dependencies; no new import-time clock/client/credential state.
+
+### Verification and limitations
+
+118 pytest checks passed, two opt-in database checks skipped; mypy src/tests passed on 77 files and git diff --check passed. Tests cover source scoping, snapshot pagination, invalid cursors/limits, unavailable source, visibility/model/category SQL guards and endpoint serialization/cache/error contracts. Read-only DB test provided with INKFIG_RELATED_DB_TEST=1; attempted execution could not connect because DATABASE_URL is not configured, prerequisite now explicitly skips. Actual new SQL execution is not claimed. Existing Starlette/AnyIO deprecation warning remains. No production data or storage changed during verification. Companion frontend 330 checks and strict production build passed.
+
+### Git and deployment
+
+Matching feature/artwork-detail-page branches in main-system and user-FE; user-system unchanged. Subject: Add stored-vector related artwork feed. Fetch/rebase before push, then previously authorized fast-forward main merge/push. Deploy existing main-system workflow first, frontend next; no migration prerequisite. Exact hashes, push/merge/conflict and deployment outcomes reported in final handoff; historical entries retained. Computer-use visual review was blocked by browser URL safety verification and is not claimed.

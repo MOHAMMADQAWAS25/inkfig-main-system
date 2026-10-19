@@ -1,6 +1,8 @@
 from typing import Annotated
 
 from fastapi import Depends
+from src.app.services.related_artworks_service import RelatedArtworksService
+from src.infrastructure.repositories.related_artworks_repository import SqlAlchemyRelatedArtworksRepository
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.app.services.work_service import WorkService
@@ -12,6 +14,14 @@ from src.infrastructure.integrations.voyage_embeddings import (
 )
 from src.infrastructure.integrations.work_media import ArtworkMediaProcessor
 from src.infrastructure.repositories.work_repository import SqlAlchemyWorkRepository
+
+
+def get_related_artworks_service(
+    session: Annotated[AsyncSession, Depends(get_database_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> RelatedArtworksService:
+    storage = SupabaseWorkStorage(settings.supabase_url, settings.supabase_secret_key, settings.works_bucket)
+    return RelatedArtworksService(SqlAlchemyRelatedArtworksRepository(session, storage))
 
 
 def get_work_service(

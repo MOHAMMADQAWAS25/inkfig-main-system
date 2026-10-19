@@ -2,7 +2,10 @@ from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from src.app.services.related_artworks_service import RelatedArtworksService
+from src.entities.dto.related_artworks import RelatedArtworksResponse
+from src.interface.dependencies.works import get_related_artworks_service
 
 from src.app.services.work_service import WorkService
 from src.entities.dto.works import (
@@ -30,6 +33,25 @@ from src.interface.dependencies.authentication import (
 from src.interface.dependencies.works import get_work_service
 
 router = APIRouter(prefix="/works", tags=["works"])
+
+
+@router.get("/{work_id}/related", response_model=RelatedArtworksResponse)
+async def related_artworks(
+    work_id: UUID,
+    response: Response,
+    service: Annotated[RelatedArtworksService, Depends(get_related_artworks_service)],
+    viewer: Annotated[UUID | None, Depends(get_optional_user)],
+    limit: int = Query(20, ge=1, le=50),
+    cursor: str | None = Query(default=None, max_length=512),
+) -> RelatedArtworksResponse:
+    response.headers["Cache-Control"] = "private, no-store"
+    response.headers["Vary"] = "Cookie, Authorization"
+    try:
+        return await service.get(work_id, viewer, limit, cursor)
+    except WorkNotFoundError as error:
+        raise HTTPException(404, "Work not found.") from error
+    except ValueError as error:
+        raise HTTPException(400, str(error)) from error
 
 
 @router.get("/types", response_model=list[WorkTypeResponse])
