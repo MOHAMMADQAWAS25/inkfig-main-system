@@ -118,3 +118,24 @@ work if storage deletion fails after a successful banner assignment.
 with `INKFIG_EXHIBITION_DB_TEST=1 pytest tests/test_exhibition_database.py` using a
 configured `.env`; it creates temporary fixtures inside an explicitly rolled-back
 transaction and performs no storage uploads or deletes.
+## Live submissions, decision notifications and counters
+
+Migration `inkfig-user-system/migrations/20261019_023_exhibition_notifications.sql`
+must be applied before deploying this backend's live-notification support.
+Submission/withdrawal decisions and recipient notifications commit atomically.
+Identical submission-decision retries are no-ops; withdrawal retries cannot insert
+a second decision after the pending request is consumed. Exhibition and reason
+snapshots remain available for withdrawal notifications after membership removal.
+Self notifications remain excluded. Social notification upserts stay compatible.
+
+After committing, the main backend sends `exhibitions.changed` with the exhibition
+ID only to active verified managers and the affected user, plus
+`notifications.changed` to decision recipients. Delivery failure never undoes a
+saved decision. API Gateway clients are created at execution time for SnapStart.
+
+`GET /api/v1/exhibitions/pending-counts` requires `exhibitions.manage` and returns
+`{total,items:[{exhibition_id,submissions,withdrawals}]}` for published work and
+active accounts, matching the review list. These are pending-action counts, not
+unread counts; simply opening a queue does not clear them. No manager notification
+rows are created for incoming requests. Lists fetch on opening and refresh from
+signals only while mounted; badge summary requests may occur on other pages.

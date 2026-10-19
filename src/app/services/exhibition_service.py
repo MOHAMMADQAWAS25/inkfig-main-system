@@ -1,3 +1,4 @@
+from typing import Any
 from uuid import UUID, uuid4
 
 from src.entities.dto.exhibitions import (
@@ -14,6 +15,10 @@ from src.entities.repositories.works import WorkMediaProcessor, WorkStorage
 
 
 class ExhibitionService:
+    async def pending_counts(self, actor: UUID | None) -> dict[str, Any]:
+        await self.authorize(actor, "exhibitions.manage")
+        return await self.repository.pending_counts()
+
     def __init__(
         self,
         repository: ExhibitionRepository,

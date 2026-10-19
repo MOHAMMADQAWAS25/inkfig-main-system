@@ -1,10 +1,11 @@
-from typing import Protocol
+from typing import Any, Protocol
 from uuid import UUID
 
 from src.entities.dto.exhibitions import Exhibition, ExhibitionInput, Submission
 
 
 class ExhibitionRepository(Protocol):
+    async def pending_counts(self) -> dict[str, Any]: ...
     async def is_administrator(self, user_id: UUID) -> bool: ...
     async def delete(self, exhibition_id: UUID) -> None: ...
     async def withdraw(

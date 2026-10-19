@@ -14,8 +14,11 @@ from src.entities.dto.exhibitions import (
     ExhibitionInput,
     Submission,
 )
-from src.infrastructure.integrations.supabase_storage import SupabaseWorkStorage
 from src.entities.exceptions.works import StorageDeleteError
+from src.infrastructure.integrations.notification_realtime import (
+    publish_exhibition_updates,
+)
+from src.infrastructure.integrations.supabase_storage import SupabaseWorkStorage
 
 
 class SqlAlchemyExhibitionRepository:
@@ -26,6 +29,30 @@ class SqlAlchemyExhibitionRepository:
         works: SupabaseWorkStorage,
     ) -> None:
         self.session, self.banners, self.works = session, banners, works
+
+    async def pending_counts(self) -> dict[str, Any]:
+        rows = (await self.session.execute(text("""
+            select s.exhibition_id,
+                   count(*) filter(where s.status='pending') submissions,
+                   count(*) filter(where s.withdrawal_status='pending') withdrawals
+            from exhibition_submissions s join works w on w.work_id=s.work_id
+            join user_accounts a on a.user_id=s.user_id
+            where a.account_status='active' and w.status='published'
+              and (s.status='pending' or s.withdrawal_status='pending')
+            group by s.exhibition_id
+        """))).mappings().all()
+        items = [dict(row) for row in rows]
+        return {"items": items, "total": sum(int(row["submissions"]) + int(row["withdrawals"]) for row in rows)}
+
+    async def decision_notification(self, exhibition_id: UUID, submission_id: UUID, actor: UUID, event: str, reason: str | None, key: str) -> None:
+        await self.session.execute(text("""
+            insert into notifications(recipient_user_id,actor_user_id,event_type,work_id,
+                exhibition_id,submission_id,exhibition_name,decision_reason,decision_key)
+            select s.user_id,:actor,:event,s.work_id,s.exhibition_id,s.submission_id,e.name,:reason,:key
+            from exhibition_submissions s join exhibitions e on e.exhibition_id=s.exhibition_id
+            where s.exhibition_id=:id and s.submission_id=:submission and s.user_id<>:actor
+            on conflict do nothing
+        """), {"id": exhibition_id, "submission": submission_id, "actor": actor, "event": event, "reason": reason, "key": key})
 
     async def allowed(self, user_id: UUID, permission: str) -> bool:
         return bool(
@@ -82,6 +109,7 @@ class SqlAlchemyExhibitionRepository:
         except Exception:
             await self.session.rollback()
             raise
+        await publish_exhibition_updates(self.session, exhibition_id)
 
     async def list_exhibitions(
         self, limit: int, cursor: int, period: str = "all"
@@ -254,6 +282,7 @@ class SqlAlchemyExhibitionRepository:
             raise ExhibitionError(
                 409, "This work has already been submitted."
             ) from error
+        await publish_exhibition_updates(self.session, exhibition_id, user_id)
 
     async def submissions(
         self,
@@ -326,24 +355,19 @@ class SqlAlchemyExhibitionRepository:
         reason: str | None,
     ) -> None:
         await self.lock(exhibition_id)
+        previous = (await self.session.execute(text(
+            "select user_id,status,rejection_reason from exhibition_submissions where exhibition_id=:id and submission_id=:submission"
+        ), {"id": exhibition_id, "submission": submission_id})).mappings().first()
+        if previous is None:
+            raise ExhibitionError(404, "Submission not found.")
+        if previous["status"] == status and previous["rejection_reason"] == (reason if status == "rejected" else None):
+            return
         if status == "approved":
             await self.session.execute(
                 text(
                     "select w.work_id from works w join exhibition_submissions s on s.work_id=w.work_id where s.exhibition_id=:id and s.submission_id=:submission for share of w"
                 ),
                 {"id": exhibition_id, "submission": submission_id},
-            )
-            previous = (
-                (
-                    await self.session.execute(
-                        text(
-                            "select user_id,status from exhibition_submissions where exhibition_id=:id and submission_id=:submission"
-                        ),
-                        {"id": exhibition_id, "submission": submission_id},
-                    )
-                )
-                .mappings()
-                .first()
             )
             if previous is not None and previous["status"] == "rejected":
                 await self.check_capacity(exhibition_id, previous["user_id"])
@@ -355,7 +379,7 @@ class SqlAlchemyExhibitionRepository:
             withdrawal_requested_at=case when cast(:status as varchar)='rejected' then null else withdrawal_requested_at end,
             withdrawal_review_reason=case when cast(:status as varchar)='rejected' then null else withdrawal_review_reason end
             where exhibition_id=:id and submission_id=:submission
-            returning submission_id"""),
+            returning reviewed_at"""),
             {
                 "id": exhibition_id,
                 "submission": submission_id,
@@ -366,7 +390,11 @@ class SqlAlchemyExhibitionRepository:
         )
         if found is None:
             raise ExhibitionError(404, "Submission not found.")
+        changed = previous["status"] != status
+        if changed:
+            await self.decision_notification(exhibition_id, submission_id, actor, f"submission_{status}", reason, f"submission:{submission_id}:{status}:{found}")
         await self.session.commit()
+        await publish_exhibition_updates(self.session, exhibition_id, previous["user_id"], notification=changed)
 
     async def withdraw(
         self, exhibition_id: UUID, submission_id: UUID, actor: UUID, reason: str | None
@@ -417,6 +445,7 @@ class SqlAlchemyExhibitionRepository:
                 409, "Only pending or approved submissions can be withdrawn."
             )
         await self.session.commit()
+        await publish_exhibition_updates(self.session, exhibition_id, actor)
 
     async def review_withdrawal(
         self,
@@ -433,14 +462,15 @@ class SqlAlchemyExhibitionRepository:
             "actor": actor,
             "reason": reason,
         }
-        found = await self.session.scalar(
+        record = (await self.session.execute(
             text(
-                "select submission_id from exhibition_submissions where exhibition_id=:id and submission_id=:submission and status='approved' and withdrawal_status='pending' for update"
+                "select user_id,withdrawal_requested_at from exhibition_submissions where exhibition_id=:id and submission_id=:submission and status='approved' and withdrawal_status='pending' for update"
             ),
             params,
-        )
-        if found is None:
+        )).mappings().first()
+        if record is None:
             raise ExhibitionError(409, "No pending deletion request was found.")
+        await self.decision_notification(exhibition_id, submission_id, actor, f"withdrawal_{status}", reason, f"withdrawal:{submission_id}:{record['withdrawal_requested_at']}")
         await self.session.execute(
             text("""insert into exhibition_withdrawal_audits(exhibition_id,submission_id,work_id,user_id,reason,decision,review_reason,reviewer_user_id)
             select exhibition_id,submission_id,work_id,user_id,withdrawal_reason,:decision,:reason,:actor
@@ -462,6 +492,8 @@ class SqlAlchemyExhibitionRepository:
                 params,
             )
         await self.session.commit()
+
+        await publish_exhibition_updates(self.session, exhibition_id, record["user_id"], notification=True)
 
     async def block(
         self, exhibition_id: UUID, user_id: UUID, actor: UUID, reason: str | None
@@ -493,6 +525,7 @@ class SqlAlchemyExhibitionRepository:
                 params,
             )
         await self.session.commit()
+        await publish_exhibition_updates(self.session, exhibition_id, user_id)
 
     async def blocks(
         self, exhibition_id: UUID, limit: int, cursor: int

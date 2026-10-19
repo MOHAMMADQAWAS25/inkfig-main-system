@@ -3117,3 +3117,28 @@ Deploy main-system through existing GitHub Actions before companion frontend pub
 ### Git
 
 Branch: feature/exhibition-interaction-polish. Commit message: Add administrator-only exhibition deletion. Fetch/rebase before branch push, then explicitly authorized fast-forward main merge/push. Exact commit hash, push/merge/conflict and deployment outcomes reported in final handoff. Earlier log entries preserved.
+
+## 2026-10-19 - Live exhibition requests, student decisions and manager counters
+
+### Request and scope
+
+Students get saved decision notifications and live My submissions updates; managers get open-queue refresh only, plus pending counters on related navigation/review controls. Main-system owns transactions/events/count queries, user-system owns notification schema/read APIs, frontend owns presentation and request gating.
+
+### Changes and files
+
+- src/infrastructure/repositories/exhibition_repository.py inserts decision notifications before commit and emits invalidations afterward. Same submission decision retries do not create new notifications. Withdrawal decisions save their notification before membership removal; original artwork remains untouched. Submit/withdraw/block/delete operations update affected live views.
+- src/infrastructure/integrations/notification_realtime.py scopes exhibitions.changed to active verified managers and the affected user. Sends notifications.changed for decision recipients. Transport errors are isolated after commit and stale connections cleaned; clients/credentials resolve at execution time for SnapStart.
+- src/app/services/exhibition_service.py, src/entities/repositories/exhibitions.py and src/interface/api/routes/exhibitions.py add permission-gated GET /exhibitions/pending-counts with overall and per-exhibition pending submission/withdrawal counts.
+- tests/test_exhibition_live.py and docs/exhibitions.md cover contracts, atomicity, duplicate handling, counters, permission scope and delivery-failure behavior. This log records work.
+
+### API, database and permissions
+
+New GET /api/v1/exhibitions/pending-counts requires exhibitions.manage; returns {total,items:[{exhibition_id,submissions,withdrawals}]}. Existing decision APIs/permission checks remain. Events contain exhibition ID only, not private decision reasons; clients retrieve protected canonical data. No main-system migration: requires user-system 20261019_023_exhibition_notifications.sql before this deployment. No new grants, environment variables or secrets. Self notifications remain excluded; there are no manager notification rows for new requests.
+
+### Verification
+
+108 pytest tests passed, one existing opt-in database test skipped; mypy src/tests passed on 72 files, targeted Ruff and git diff --check passed. Actual SQL migration and transaction flow verified inside fully rolled-back PostgreSQL transactions: rejection, identical retry, approval, withdrawal request/count, approved withdrawal, notification retention, original-work preservation and existing social upserts. WebSocket delivery was mocked in DB verification. Unit tests verify recipient scope, post-commit delivery, atomic notification failure and safe transport failure. Initial diagnostic attempted multi-statement SQL through a prepared driver; corrected to raw migration execution and rerun successfully.
+
+### Frontend, deployment and limitations
+
+Manager trophy/mobile-menu and per-exhibition Review submissions controls show pending-action counts; student bell shows unread notifications. Lists subscribe only while mounted/open, preserve active filters and refresh after reconnect. Badge summary requests are intentionally allowed on other pages. Deploy user-system migration/API first, then main-system, then frontend via main workflows; no production fixture records or messages retained. Delivery is best effort, not a durable WebSocket outbox; canonical REST state and saved notifications recover on reconnect/open.

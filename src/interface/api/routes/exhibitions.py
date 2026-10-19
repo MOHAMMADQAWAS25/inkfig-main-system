@@ -53,6 +53,11 @@ async def create_exhibition(
     return await service.save(actor, data)
 
 
+@router.get("/pending-counts")
+async def pending_counts(service: Service, actor: Actor) -> dict[str, object]:
+    return await service.pending_counts(actor)
+
+
 @router.get("/{exhibition_id}", response_model=Exhibition)
 async def get_exhibition(exhibition_id: UUID, service: Service) -> Exhibition:
     return await service.get(exhibition_id)
