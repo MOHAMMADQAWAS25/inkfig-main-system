@@ -3190,3 +3190,25 @@ Backend-only existing main-system workflow; no frontend/user-system deployment o
 ### Git
 
 Branch: fix/related-artwork-similarity. Commit subject: Require visual similarity for related artworks. Fetch/rebase newest origin/main before branch push, then previously authorized fast-forward main merge/push. Exact commit hash, push/merge/conflict and deployment outcomes reported in final handoff. Historical feature-log entries unchanged.
+
+## 2026-10-20 - Exhibition end times and current period
+
+### Request and changes
+
+User selected administrator-set end dates to distinguish Current, Upcoming and Past exhibitions. Added timezone-aware event_ends_at with end-after-start validation, persistence and an additive current list period. Server time classifies current as start <= now < end, past as end <= now, upcoming before start; filters run before independent pagination. Existing/null legacy end times resolve to start +24 hours, editable by managers. Submission DTO/query adds public description and English/Arabic category names through one work-type join, supporting large split cards without per-card detail calls. Existing publication/active-account/approval/block/withdrawal privacy guards retained.
+
+### Repositories and files
+
+All three clean repositories pulled first. Matching feature/current-exhibition-gallery branches in main-system and user-FE; user-system unchanged. Files: exhibition DTO/repository/routes, migration 20261020_017_exhibition_end_time.sql, docs/exhibitions.md, new test_exhibition_periods.py, extended submission-avatar mapping test and this log.
+
+### API, database, permissions and SnapStart
+
+Migration adds nullable event_ends_at, backfills existing schedules to start +24 hours and adds end-after-start check. Nullable column supports rolling deployment/old-backend rollback; new API always resolves a value. Existing clients omitting the field receive the compatibility duration. New current query period and additive summary fields; no removed endpoints or permission changes. Create/edit remains backend-authorized with exhibitions.manage. No original artworks/storage/embeddings changed, new dependencies/configuration/secrets/IAM or import-time clock/client state. Managers should review legacy exhibition durations if different from 24 hours.
+
+### Verification
+
+129 pytest tests passed, two existing opt-in database tests skipped; mypy src/tests passed on 78 files, git diff --check passed. Tests cover end chronology/timezones/legacy duration, explicit persistence, independent SQL period predicates/cursors, current route/invalid period and category/description/avatar mapping. Existing permissions, live notifications and artwork similarity tests passed. Migration SQL inspected/tested offline; no local production DB mutation or PostgreSQL integration execution claimed. Existing Starlette/AnyIO deprecation warning remains.
+
+### Deployment and Git
+
+Apply migration through existing main-system workflow before API deployment, then deploy frontend; no user-system deployment. No production fixture exhibitions created or real reviews submitted. Branch: feature/current-exhibition-gallery. Commit subject: Add exhibition end dates and current period. Fetch/rebase before branch push and previously authorized fast-forward main merge/push. Exact hash, push/merge/conflict, migration and deployment outcomes reported in final handoff. Prior log entries preserved.

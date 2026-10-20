@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Literal
 from uuid import UUID
 
@@ -9,6 +9,7 @@ class ExhibitionInput(BaseModel):
     name: str = Field(min_length=1, max_length=160)
     description: str = Field(min_length=1, max_length=5000)
     event_at: datetime
+    event_ends_at: datetime | None = None
     participation_opens_at: datetime
     participation_closes_at: datetime
 
@@ -22,13 +23,18 @@ class ExhibitionInput(BaseModel):
 
     @model_validator(mode="after")
     def dates(self) -> "ExhibitionInput":
+        if self.event_ends_at is None:
+            self.event_ends_at = self.event_at + timedelta(hours=24)
         values = (
             self.event_at,
+            self.event_ends_at,
             self.participation_opens_at,
             self.participation_closes_at,
         )
         if any(value.tzinfo is None or value.utcoffset() is None for value in values):
             raise ValueError("Dates must include a timezone.")
+        if self.event_ends_at <= self.event_at:
+            raise ValueError("The exhibition must end after it starts.")
         if (
             not self.participation_opens_at
             < self.participation_closes_at
@@ -96,6 +102,9 @@ class Submission(BaseModel):
     artist_name: str
     artist_avatar_url: str | None = None
     title: str
+    description: str = ""
+    type_name_en: str = ""
+    type_name_ar: str = ""
     image_url: str
     status: str
     rejection_reason: str | None

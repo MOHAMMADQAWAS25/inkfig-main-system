@@ -8,9 +8,10 @@ published works while participation is open and they are not blocked.
 
 ## API
 
-- `GET /api/v1/exhibitions?limit=20&cursor=0&period=all|upcoming|past`: public
+- `GET /api/v1/exhibitions?limit=20&cursor=0&period=all|current|upcoming|past`: public
   listing. Upcoming exhibitions have `event_at > now()` and sort nearest first;
-  past exhibitions have `event_at <= now()` and sort most recent first. Each period
+  current exhibitions have `event_at <= now() < event_ends_at`, and past exhibitions
+  have `event_ends_at <= now()` and sort most recent first. Each period
   has its own continuation cursor. The default all preserves descending ordering.
 - `POST /api/v1/exhibitions`: create; requires `exhibitions.manage`.
 - `GET /api/v1/exhibitions/eligible?work_id={optional}&exhibition_id={optional}&cursor=0`:
@@ -20,6 +21,13 @@ published works while participation is open and they are not blocked.
   entries. Optional exhibition ID supports targeted upload preflight.
 - `GET /api/v1/exhibitions/{id}`: public details.
 - `PUT /api/v1/exhibitions/{id}`: replace details; requires management.
+  Create/edit accepts timezone-aware `event_ends_at > event_at`. Older clients
+  omitting it receive a 24-hour duration; administrators can set an explicit end.
+  Apply migration `20261020_017_exhibition_end_time.sql` before the new API: it
+  adds the end column/check and backfills existing exhibitions to start +24 hours.
+  Column remains nullable for rolling deployment/old-client rollback compatibility;
+  API filters and responses resolve any legacy null to start +24 hours. Existing
+  schedules should be reviewed by managers if their actual durations differ.
 - `DELETE /api/v1/exhibitions/{id}`: permanently delete; requires a current active,
   verified administrator/system-administrator with `exhibitions.manage` (not a
   supervisor). Returns 204. Serializes with submissions/reviews and removes the
@@ -31,6 +39,8 @@ published works while participation is open and they are not blocked.
 - `POST /api/v1/exhibitions/{id}/submissions`: `{work_id}`, requires
   `exhibitions.participate`; returns 204 with a pending submission.
 - `GET /api/v1/exhibitions/{id}/submissions?scope=public|mine|manage`: paginated;
+  Responses add public artwork description and English/Arabic work-type names for
+  exhibition split-card summaries through existing joins, without per-card calls.
   public returns only approved, published works from active, unblocked participants;
   mine requires participation permission, manage requires management permission.
   Optional `status=pending|approved|rejected` is applied before pagination without

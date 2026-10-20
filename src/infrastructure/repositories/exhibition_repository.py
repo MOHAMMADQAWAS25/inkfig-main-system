@@ -114,10 +114,11 @@ class SqlAlchemyExhibitionRepository:
     async def list_exhibitions(
         self, limit: int, cursor: int, period: str = "all"
     ) -> list[Exhibition]:
-        condition = {"upcoming": "event_at > now()", "past": "event_at <= now()"}.get(
+        end = "coalesce(event_ends_at,event_at + interval '24 hours')"
+        condition = {"upcoming": "event_at > now()", "current": f"event_at <= now() and {end} > now()", "past": f"{end} <= now()"}.get(
             period, "true"
         )
-        order = "asc" if period == "upcoming" else "desc"
+        order = "asc" if period in ("upcoming", "current") else "desc"
         rows = (
             (
                 await self.session.execute(
@@ -208,12 +209,12 @@ class SqlAlchemyExhibitionRepository:
     ) -> Exhibition:
         params = {**data.model_dump(), "creator": user_id, "id": exhibition_id}
         if exhibition_id:
-            statement = """update exhibitions set name=:name,description=:description,event_at=:event_at,
+            statement = """update exhibitions set name=:name,description=:description,event_at=:event_at,event_ends_at=:event_ends_at,
                 participation_opens_at=:participation_opens_at,participation_closes_at=:participation_closes_at,
                 updated_at=now() where exhibition_id=:id returning *"""
         else:
-            statement = """insert into exhibitions(creator_user_id,name,description,event_at,participation_opens_at,participation_closes_at)
-                values(:creator,:name,:description,:event_at,:participation_opens_at,:participation_closes_at) returning *"""
+            statement = """insert into exhibitions(creator_user_id,name,description,event_at,event_ends_at,participation_opens_at,participation_closes_at)
+                values(:creator,:name,:description,:event_at,:event_ends_at,:participation_opens_at,:participation_closes_at) returning *"""
         row = (await self.session.execute(text(statement), params)).mappings().first()
         if row is None:
             raise ExhibitionError(404, "Exhibition not found.")
@@ -304,9 +305,10 @@ class SqlAlchemyExhibitionRepository:
             (
                 await self.session.execute(
                     text(f"""
-            select s.*,w.title,w.storage_path,p.full_name artist_name,
+            select s.*,w.title,w.description,w.storage_path,t.name_en type_name_en,t.name_ar type_name_ar,p.full_name artist_name,
                    p.avatar_object_path as artist_avatar_path from exhibition_submissions s
             join works w on w.work_id=s.work_id join user_profiles p on p.user_id=s.user_id
+            join work_types t on t.type_id=w.type_id
             join user_accounts a on a.user_id=s.user_id
             where s.exhibition_id=:id and {condition} and a.account_status='active' and w.status='published'
             and (cast(:status as text) is null or s.status=:status)

@@ -22,6 +22,7 @@ async def test_submission_avatar_uses_existing_join_and_public_storage_url(
     result.mappings.return_value.all.return_value = [{
         "submission_id": UUID(int=1), "work_id": UUID(int=2),
         "user_id": UUID(int=3), "artist_name": "Artist", "title": "Art",
+        "description": "A landscape", "type_name_en": "Digital Art", "type_name_ar": "فن رقمي",
         "storage_path": "art.png", "artist_avatar_path": path,
         "status": "pending", "rejection_reason": None,
         "created_at": datetime(2026, 10, 18, tzinfo=UTC),
@@ -33,6 +34,9 @@ async def test_submission_avatar_uses_existing_join_and_public_storage_url(
     assert len(items) == 1
     assert items[0].artist_avatar_url == storage.profile_avatar_url(path)
     assert "artist_avatar_path" not in items[0].model_dump()
+    assert items[0].description == "A landscape"
+    assert items[0].type_name_en == "Digital Art"
+    assert items[0].type_name_ar == "فن رقمي"
     query = str(session.execute.call_args.args[0])
     assert "p.avatar_object_path as artist_avatar_path" in query
     assert "a.account_status='active'" in query

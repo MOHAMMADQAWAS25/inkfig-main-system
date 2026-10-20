@@ -29,7 +29,7 @@ async def list_exhibitions(
     service: Service,
     limit: int = Query(20, ge=1, le=50),
     cursor: int = Query(0, ge=0, le=100000),
-    period: Literal["all", "upcoming", "past"] = "all",
+    period: Literal["all", "current", "upcoming", "past"] = "all",
 ) -> ExhibitionPage:
     return await service.list(limit, cursor, period)
 
