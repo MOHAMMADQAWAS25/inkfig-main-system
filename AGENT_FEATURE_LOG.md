@@ -3212,3 +3212,75 @@ Migration adds nullable event_ends_at, backfills existing schedules to start +24
 ### Deployment and Git
 
 Apply migration through existing main-system workflow before API deployment, then deploy frontend; no user-system deployment. No production fixture exhibitions created or real reviews submitted. Branch: feature/current-exhibition-gallery. Commit subject: Add exhibition end dates and current period. Fetch/rebase before branch push and previously authorized fast-forward main merge/push. Exact hash, push/merge/conflict, migration and deployment outcomes reported in final handoff. Prior log entries preserved.
+
+## 2026-10-20 - Minimum artwork dimensions of 200 by 300 pixels
+
+### Request
+
+Accept new artwork images only when width >=200 pixels AND height >=300 pixels, including exactly 200 x 300.
+
+### Changes
+
+- Added a pure domain rule and specific error; no area-only or orientation-swapping shortcut. EXIF-normalized display dimensions are checked from the uploaded file, not client claims.
+- Work-upload dependency enables validation inside the existing background-thread image decoder before derivative generation/upload. Service independently validates returned dimensions before saving media/publishing; rejected works receive no embeddings.
+- Shared processor keeps validation optional so exhibition banners and legacy media backfills preserve existing behavior. Existing published works/avatars unchanged.
+- Existing signed upload/draft lifecycle remains: backend inspection occurs after direct storage upload; a bypassing client's rejected original remains in its existing draft workflow, not a published work. Normal frontend rejects before any upload.
+- Preserved user-owned samconfig.toml changes, existing permissions, maximum limits, responsive feed and provider behavior.
+
+### Repositories
+
+- `inkfig-main-system`: authoritative publication validation, API error and tests.
+- `inkfig-user-FE`: companion pre-upload validation and bilingual messages.
+
+### Files
+
+- `src/entities/work_image_rules.py`: inclusive minimum dimensions.
+- `src/entities/exceptions/works.py`: WorkImageTooSmallError.
+- `src/app/services/work_service.py`: publication guard.
+- `src/infrastructure/integrations/work_media.py`: optional decoded-dimension callback before rendering variants.
+- `src/interface/dependencies/works.py`: enables artwork-only validator.
+- `src/interface/api/routes/works.py`: dedicated HTTP 422 message.
+- `tests/test_work_media.py`: boundaries, orientation, no-publication/no-variant behavior and HTTP mapping.
+- `README.md`: documented scope and width/height interpretation.
+- `AGENT_FEATURE_LOG.md`: append-only ticket record.
+
+### API
+
+- `POST /api/v1/works/{work_id}/publish`: returns 422 with detail `Artwork images must be at least 200 pixels wide and 300 pixels tall.` if either bound fails. Existing ownership, works.upload permission, 204 success and other errors retained. Upload-initiation fields unchanged because dimensions must be checked against the real stored bytes.
+
+### Database
+
+No migration required. No schema, index, backfill or existing-data changes. No rollback migration needed.
+
+### Permissions and scope
+
+- Existing works.upload permission and backend draft ownership checks remain authoritative.
+- Same new-artwork flow covers normal/exhibition uploads. Previously published works can still be assigned to exhibitions; no retroactive minimum or deletion imposed.
+- No role, account, organization or exhibition-management scope changes.
+
+### Frontend
+
+Companion frontend validates before draft/storage creation, shows English/Arabic minimum hint and error, and retains retry/loading behavior. No card-size changes.
+
+### Verification
+
+- `[passed] uv --cache-dir D:/new/InkFig/.uv-cache run --with-requirements requirements.txt python -m pytest -q` - 141 passed, two existing opt-in database checks skipped.
+- `[passed] same environment python -m mypy src tests` - no issues in 79 files.
+- `[passed] targeted tests/test_work_media.py` - 19 tests.
+- `[passed] git diff --check`
+- `[failed] initial uv execution` - default cache directory unavailable; rerun with workspace cache succeeded.
+- `[not run] live production upload/browser verification` - no real account, storage or provider writes used for testing. Existing Starlette/AnyIO deprecation warning remains.
+
+### Deployment
+
+Deploy main backend first, frontend second through existing main workflows. No migration, IAM, dependency, environment or configuration changes. Existing unrelated migration017 is not introduced or run by this ticket.
+
+### Git
+
+- Branch: `main`
+- Commit: ticket subject `Enforce minimum artwork image dimensions` (hash reported in handoff).
+- Push: pending final synchronization at entry creation; result reported in handoff.
+
+### Notes
+
+300 x 200 fails; 500 x 300 passes. No new import-time clients/connections/clocks or SnapStart concerns. Previous log entries and unrelated SAM configuration retained.

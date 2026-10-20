@@ -1,6 +1,7 @@
 from typing import Annotated
 
 from fastapi import Depends
+from src.entities.work_image_rules import validate_work_image_dimensions
 from src.app.services.related_artworks_service import RelatedArtworksService
 from src.infrastructure.repositories.related_artworks_repository import SqlAlchemyRelatedArtworksRepository
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -45,5 +46,5 @@ def get_work_service(
         settings.works_bucket,
         embeddings,
         settings.voyage_min_similarity,
-        ArtworkMediaProcessor(storage),
+        ArtworkMediaProcessor(storage, validate_work_image_dimensions),
     )

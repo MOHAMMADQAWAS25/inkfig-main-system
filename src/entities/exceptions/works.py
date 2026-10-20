@@ -14,6 +14,10 @@ class UnsupportedWorkFileError(Exception):
     pass
 
 
+class WorkImageTooSmallError(Exception):
+    pass
+
+
 class StorageUploadError(Exception):
     pass
 

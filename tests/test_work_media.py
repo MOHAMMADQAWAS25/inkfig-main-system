@@ -1,11 +1,12 @@
 from io import BytesIO
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from PIL import Image
 
 from src.app.services.work_service import WorkService
-from src.entities.exceptions.works import UnsupportedWorkFileError
+from src.entities.exceptions.works import UnsupportedWorkFileError, WorkImageTooSmallError
+from src.entities.work_image_rules import validate_work_image_dimensions
 from src.infrastructure.integrations.work_media import (
     ArtworkMediaProcessor,
     render_image,
@@ -91,7 +92,7 @@ async def test_publication_prepares_and_persists_media_first() -> None:
             self.uploaded: list[str] = []
 
         async def download_image(self, path: str) -> bytes:
-            return png(100, 50)
+            return png(200, 300)
 
         async def upload_variant(self, path: str, data: bytes) -> None:
             self.uploaded.append(path)
@@ -99,9 +100,67 @@ async def test_publication_prepares_and_persists_media_first() -> None:
     repository, storage = FakeWorkRepository(), Storage()
     repository.path = "owner/art.png"
     service = WorkService(
-        repository, storage, "works", media_processor=ArtworkMediaProcessor(storage)
+        repository, storage, "works", media_processor=ArtworkMediaProcessor(storage, validate_work_image_dimensions)
     )
     await service.publish(uuid4(), uuid4())
     assert repository.published
-    assert repository.media.width == 100
-    assert storage.uploaded == ["owner/art.png.feed-100.webp"]
+    assert repository.media.width == 200
+    assert storage.uploaded == ["owner/art.png.feed-200.webp"]
+
+
+@pytest.mark.parametrize("width,height", [(200, 300), (201, 301), (500, 300), (200, 600)])
+def test_artwork_minimum_includes_boundary(width: int, height: int) -> None:
+    assert render_image(png(width, height), validate_work_image_dimensions)[:2] == (width, height)
+
+
+@pytest.mark.parametrize("width,height", [(199, 300), (200, 299), (300, 200), (1, 1), (1000, 299)])
+def test_artwork_rejects_either_dimension_below_minimum(width: int, height: int) -> None:
+    with pytest.raises(WorkImageTooSmallError):
+        render_image(png(width, height), validate_work_image_dimensions)
+
+
+def test_artwork_minimum_uses_exif_display_orientation() -> None:
+    for size, accepted in [((300, 200), True), ((200, 300), False)]:
+        output = BytesIO()
+        image = Image.new("RGB", size, "red")
+        exif = image.getexif(); exif[274] = 6
+        image.save(output, "JPEG", exif=exif)
+        if accepted:
+            assert render_image(output.getvalue(), validate_work_image_dimensions)[:2] == (200, 300)
+        else:
+            with pytest.raises(WorkImageTooSmallError):
+                render_image(output.getvalue(), validate_work_image_dimensions)
+
+
+@pytest.mark.asyncio
+async def test_small_artwork_is_not_published_or_saved_and_uploads_no_variants() -> None:
+    class Storage(FakeWorkStorage):
+        async def download_image(self, path: str) -> bytes:
+            return png(199, 300)
+
+        async def upload_variant(self, path: str, data: bytes) -> None:
+            pytest.fail("Rejected artwork must not upload variants")
+
+    repository, storage = FakeWorkRepository(), Storage()
+    repository.path = "owner/small.png"
+    service = WorkService(repository, storage, "works", media_processor=ArtworkMediaProcessor(storage, validate_work_image_dimensions))
+    with pytest.raises(WorkImageTooSmallError):
+        await service.publish(uuid4(), uuid4())
+    assert not repository.published
+    assert not hasattr(repository, "media")
+
+
+@pytest.mark.asyncio
+async def test_publish_maps_small_image_to_422() -> None:
+    from fastapi import HTTPException
+    from src.interface.api.routes.works import publish
+
+    class RejectingService(WorkService):
+        async def publish(self, work_id: UUID, user_id: UUID) -> None:
+            raise WorkImageTooSmallError
+
+    service = RejectingService(FakeWorkRepository(), FakeWorkStorage(), "works")
+    with pytest.raises(HTTPException) as error:
+        await publish(uuid4(), service, uuid4())
+    assert error.value.status_code == 422
+    assert "200 pixels wide and 300 pixels tall" in error.value.detail

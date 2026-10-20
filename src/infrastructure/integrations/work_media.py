@@ -1,5 +1,6 @@
 import asyncio
 import warnings
+from collections.abc import Callable
 from io import BytesIO
 
 import httpx
@@ -14,7 +15,9 @@ MAX_IMAGE_PIXELS = 80_000_000
 MAX_DECODED_PIXELS = 25_000_000
 
 
-def render_image(data: bytes) -> tuple[int, int, str, list[tuple[int, bytes]]]:
+def render_image(
+    data: bytes, validate_dimensions: Callable[[int, int], None] | None = None
+) -> tuple[int, int, str, list[tuple[int, bytes]]]:
     """Decode once off the event loop; preserve animation through the original URL."""
     try:
         with warnings.catch_warnings():
@@ -27,6 +30,8 @@ def render_image(data: bytes) -> tuple[int, int, str, list[tuple[int, bytes]]]:
                 width, height = original.size
                 if original.getexif().get(274) in {5, 6, 7, 8}:
                     width, height = height, width
+                if validate_dimensions is not None:
+                    validate_dimensions(width, height)
                 animated = getattr(original, "is_animated", False)
                 # JPEG decoder subsampling avoids allocating the full high-resolution
                 # canvas while retaining original dimensions in the media contract.
@@ -65,13 +70,19 @@ def render_image(data: bytes) -> tuple[int, int, str, list[tuple[int, bytes]]]:
 
 
 class ArtworkMediaProcessor:
-    def __init__(self, storage: WorkStorage) -> None:
+    def __init__(
+        self, storage: WorkStorage,
+        validate_dimensions: Callable[[int, int], None] | None = None,
+    ) -> None:
         self._storage = storage
+        self._validate_dimensions = validate_dimensions
 
     async def prepare(self, path: str) -> ImageMedia:
         try:
             data = await self._storage.download_image(path)
-            width, height, color, variants = await asyncio.to_thread(render_image, data)
+            width, height, color, variants = await asyncio.to_thread(
+                render_image, data, self._validate_dimensions
+            )
             await asyncio.gather(
                 *(
                     self._storage.upload_variant(f"{path}.feed-{w}.webp", content)

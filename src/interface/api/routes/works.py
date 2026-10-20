@@ -22,6 +22,7 @@ from src.entities.exceptions.works import (
     StorageDeleteError,
     StorageUploadError,
     UnsupportedWorkFileError,
+    WorkImageTooSmallError,
     WorkNotFoundError,
     WorkSearchUnavailableError,
     WorkTypeNotFoundError,
@@ -174,6 +175,10 @@ async def publish(
         await service.publish(work_id, user)
     except WorkNotFoundError as e:
         raise HTTPException(404, "Work not found.") from e
+    except WorkImageTooSmallError as e:
+        raise HTTPException(
+            422, "Artwork images must be at least 200 pixels wide and 300 pixels tall."
+        ) from e
     except UnsupportedWorkFileError as e:
         raise HTTPException(
             422, "Invalid image or image exceeds the pixel limit."

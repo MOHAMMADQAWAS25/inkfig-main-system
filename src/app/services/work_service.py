@@ -31,6 +31,7 @@ from src.entities.repositories.works import (
     WorkRepository,
     WorkStorage,
 )
+from src.entities.work_image_rules import validate_work_image_dimensions
 
 
 class WorkService:
@@ -105,6 +106,7 @@ class WorkService:
             raise WorkNotFoundError
         if self._media_processor is not None:
             media = await self._media_processor.prepare(path)
+            validate_work_image_dimensions(media.width, media.height)
             await self._repository.save_media(work_id, media)
         if not await self._repository.publish(work_id, user_id):
             raise WorkNotFoundError

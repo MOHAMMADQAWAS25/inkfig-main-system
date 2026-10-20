@@ -58,6 +58,14 @@ and adding or removing likes require an InkFig access token. Images are uploaded
 directly from the browser to the public Supabase Storage `works` bucket through a
 short-lived signed upload URL; the Supabase service key remains backend-only.
 
+New artwork images must be at least **200 pixels wide and 300 pixels tall**;
+exactly 200 x 300 is accepted. Both bounds apply independently after EXIF display
+orientation (300 x 200 does not qualify). The backend checks actual decoded
+dimensions before publishing and returns HTTP 422 for undersized images.
+The frontend also checks before creating a draft or uploading. Applies to normal
+and exhibition artwork uploads, not existing works, banners, profile pictures,
+or legacy media backfills. No database migration is required for this rule.
+
 Run database migrations before deploying a backend version that depends on them:
 
 ```powershell
