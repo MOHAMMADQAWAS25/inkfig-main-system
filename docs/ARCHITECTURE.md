@@ -1,6 +1,7 @@
 # InkFig Main System Architecture
 
-This service uses FastAPI and the same practical clean architecture as Shadow:
+This InkFig service uses FastAPI and practical clean architecture. These are
+technical layer boundaries, not another project's business rules:
 
 ```text
 src/
@@ -24,7 +25,10 @@ src/
     `-- repositories/    PostgreSQL repository implementations
 ```
 
-Tests live in `tests/`. PostgreSQL migrations will live in `migrations/` once the migration tool is selected. Every public API is versioned under `/api/v1`; `/health` is also exposed at the root for infrastructure checks.
+Tests live in `tests/`. Versioned migrations already live in `migrations/` and
+use the existing `python -m migrations.run` runner/schema_migrations ledger.
+Running it manually requires explicit approval; see the migration README.
+Public APIs are versioned under `/api/v1`; root `/health` is also an infrastructure check.
 
 ## Dependency rules
 
@@ -36,4 +40,8 @@ Tests live in `tests/`. PostgreSQL migrations will live in `migrations/` once th
 
 ## Service responsibility
 
-The main system owns artwork, portfolios, discovery, likes, recommendations, search, events, submissions, moderation, reports, and other InkFig business workflows. Authentication and user administration belong to the user system.
+The main system owns works/feed/search/related images, likes/saves, artwork moderation,
+exhibitions/submissions/withdrawals/blocks, exhibition ratings and leaderboards.
+Identity, profiles/follows, user administration, reports, search history and notification
+transport belong to the user system. Preference learning remains a proposal, not
+implemented personalization. See docs/agent for current contracts.

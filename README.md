@@ -36,9 +36,20 @@ The platform will support multiple ways of presenting and discovering artwork. T
 5. If accepted, the artwork becomes part of the event.
 6. If rejected, the student receives the teacher's rejection reason.
 
-## Project status
+## Current state and collaboration
 
-This document records the initial product direction, not a complete specification. Detailed requirements, artwork presentation modes, algorithms, roles, permissions, and additional workflows will be defined as the project develops.
+The product vision above records the original direction, not an unimplemented-feature
+list or a current role specification. Supervisors, admins and system administrators
+now manage exhibitions; implemented scope and remaining work are summarized in
+[PROJECT_STATE](docs/agent/PROJECT_STATE.md).
+
+Agents start with [AGENTS.md](AGENTS.md), the active task handoff and relevant bounded
+memory. Three collaborators use independent checkouts and the existing approved
+direct-main workflow: [procedure](docs/collaboration/WORKFLOW.md),
+[repositories/contracts](docs/collaboration/RELATED_REPOS.md).
+Source/DTOs and current memory supersede stale historical prose; the existing
+AGENT_FEATURE_LOG.md stays append-only. Do not run manual deployments, migrations
+or production writes merely to initialize project memory.
 
 ## Development
 
@@ -72,9 +83,11 @@ Run database migrations before deploying a backend version that depends on them:
 python -m migrations.run
 ```
 
-The initial migration creates `work_types`, `works`, and `work_likes`, and prepares
-the Storage bucket. It intentionally does not seed work types; the official list
-will be added in a later migration.
+The initial migration created work tables/storage; subsequent migrations already
+seeded system categories and added links/saves/vectors/media/exhibitions/ratings.
+Do not edit deployed migrations. The latest checked-in migration is
+`20261101_018_create_exhibition_ratings.sql`; production application status must
+be verified separately, not inferred from a pull. See the migration README.
 
 ## AWS Lambda deployment
 
@@ -101,6 +114,9 @@ Create a protected GitHub environment named `production` and configure these rep
 - `SUPABASE_SECRET_KEY`: production backend secret key.
 - `DATABASE_URL`: production SQLAlchemy asyncpg Session Pooler URL.
 - `ACM_CERTIFICATE_ARN`: ACM certificate ARN for the API custom domain in `eu-west-1`.
-- `JWT_SECRET`: the same signing secret used by `inkfig-user-system` so this service can validate access tokens.
+- The current workflow reads the shared JWT secret from the deployed user API Lambda
+  at runtime and masks it; it also resolves the user stack's WebSocket API output.
+  Coordinate these dependencies before deployment; never print or copy those values
+  into documentation. This is not a separately configured main-workflow JWT secret.
 
 The deployment role must be authorized to upload SAM artifacts, manage this CloudFormation stack, pass the generated Lambda execution role, and manage the Lambda and API Gateway resources declared by the template. Do not store AWS access keys or backend secrets in the repository.
