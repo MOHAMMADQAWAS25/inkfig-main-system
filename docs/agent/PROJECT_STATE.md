@@ -6,7 +6,8 @@ Start with [instructions](../../AGENTS.md) and [active handoff](../collaboration
 Establish useful bounded project memory and three-person collaboration.
 Owner's attached 2026-11-15 workflow authorizes documentation/instruction changes,
 preserving application behavior and existing work. No runtime/config/data changes.
-Task: INKFIG-COLLAB-001; human: project owner; agent/session: /root.
+Status: setup complete; no next application-implementation task has been claimed.
+Task: INKFIG-COLLAB-001; human: project owner; agent: owner-primary-2026-11-15 (/root).
 Default integration decision-maker: owner, until explicitly delegated.
 No partner workstreams or checkout/session assignments have been approved.
 
@@ -30,13 +31,19 @@ No partner workstreams or checkout/session assignments have been approved.
   Repository handoffs are publishable coordination, not locks.
 
 ## Verification / deployment distinction
-- This setup: documentation link/line-bound/secret-pattern/diff checks; see handoff.
+- This setup passed documentation links, memory size bounds, selected secret/path
+  patterns, staged Markdown-only review and whitespace checks; see handoff.
 - Application suites NOT rerun for docs-only changes. Last recorded results:
   178 pytest passed + two opt-in PostgreSQL skips; mypy 92 files, per 2026-11-01 log. Historical reports are not a new verification claim.
 - Configured workflow: [.github/workflows/deploy.yml](../../.github/workflows/deploy.yml).
 - No manual migrations, deployment, production writes or live browser tests authorized/run.
 - [skip ci] on setup commits avoids existing automatic production workflows.
-- Final setup hashes/push status: active handoff and Git history, not implied by a build.
+- Setup commit 09faaaee5b330e34d7f74bc5fa134a8b0c02d197 pushed successfully to origin/main.
+  Final checkpoint/log commit follows it in Git history; no production deployment claimed.
+
+## Applicable verification commands (not run for this docs-only setup)
+python -m pytest; python -m mypy src tests. For SAM changes: sam validate --lint; sam build.
+Do not run manual migrations/deployments or production fixtures without explicit approval.
 
 ## Partial / pending / known limits
 - Home preference learning and automatic tags are not implemented by the current related-image endpoint.
@@ -50,7 +57,7 @@ No partner workstreams or checkout/session assignments have been approved.
 - Physical-device and real PostgreSQL concurrency/plan certification are not implied by tests.
 
 ## Exact next actions
-1. Validate/publish this setup's documentation-only commits; preserve existing local files.
+1. Setup is documented/published; preserve existing local files, do not repeat it.
 2. Owner/partners each establish independent clones and publish one bounded task claim.
 3. Confirm human -> checkout/session mappings and integration owner for shared changes.
 4. On next implementation, inspect current source and relevant memory; update its handoff.

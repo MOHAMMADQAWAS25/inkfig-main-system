@@ -3411,3 +3411,97 @@ Matching fix/leaderboard-controls branches in main-system and user-FE, clean mai
 ### Deployment and Git
 
 Backend first, frontend second through existing main deployments. Commit subject: Filter exhibition leaderboard by artwork category. Fetch/rebase before branch push and authorized fast-forward main merge/push. Exact hashes, conflicts, push and deployment results in handoff. Revert frontend ticket commit first then backend if requested; preserve votes/schema, logs and unrelated work. Live offset pagination limitations unchanged.
+
+## 2026-11-15 - Establish collaboration and bounded project memory
+
+### Request
+
+Apply the owner's workflow to the existing three-repository InkFig project, preserving
+code/work/history and enabling independent collaborators to recover actual current state.
+Documentation-only setup; no application behavior changes.
+
+### Changes
+
+- Added current repository AGENTS, detailed workflow, related-repository map and per-task
+  handoff INKFIG-COLLAB-001. Retained approved direct-main policy without new PR gates.
+- Added six bounded source-backed memory files; distinguished implemented ratings/
+  leaderboard/discovery features from proposed preferences/tags and unresolved SEO diagnosis.
+- Documented independent checkouts, task claims (not locks), integration ownership,
+  explicit manual operational authorization, checks and context recovery.
+- Current bounded memory supersedes full historical-log rereads; all previous log entries
+  retained. Corrected relevant stale README/architecture/migration prose, not runtime code.
+- Workspace convenience index is not a fourth repository or sole handoff; tracked frontend
+  map links every service's published memory. No assumed partner workstream assignment.
+
+### Repositories
+
+- `inkfig-main-system`: current artwork/exhibition/search/rating contracts and operational docs.
+- `inkfig-user-system`: current identity/community/report/live contracts and auth/migration docs.
+- `inkfig-user-FE`: actual screens/layout/contracts, bootstrap index and frontend conventions.
+
+### Files
+
+- `AGENTS.md`: startup, architecture, collaboration/Git, checks, permissions and recovery.
+- `docs/collaboration/WORKFLOW.md`: three-person task/Git/verification/operational procedure.
+- `docs/collaboration/RELATED_REPOS.md`: relative repository/contract/ownership index.
+- `docs/collaboration/tasks/INKFIG-COLLAB-001.md`: claim, acceptance, scope, checkpoint and publication.
+- `docs/agent/PROJECT_STATE.md`: current scope, implementation, blockers, baseline/checks/next action.
+- `docs/agent/DECISIONS.md`: actual approved decisions and supersessions.
+- `docs/agent/SCREENS.md`: implemented/partial UI surfaces or backend applicability.
+- `docs/agent/API_OVERVIEW.md`: concise contracts linked to authoritative routes/DTOs.
+- `docs/agent/DOMAIN_MODEL.md`: entities/relationships/invariants.
+- `docs/agent/USER_FLOWS.md`: end-to-end roles, transitions, failures/recovery.
+- `README.md`, `docs/ARCHITECTURE.md`: improved existing docs rather than competing specs.
+- Backend `migrations/README.md`: existing runner, ledger and approval/dependency cautions.
+- `AGENT_FEATURE_LOG.md`: this appended entry. Workspace root AGENTS/map are local indexes only.
+
+### API
+
+No API changes. Documentation links source contracts; no schemas/endpoints invented or modified.
+
+### Database
+
+No migration required. No schema/index/data/storage/backfill change or production migration run.
+
+### Permissions and scope
+
+No application role, authorization or tenant scope changed. Backend remains authoritative.
+Manual deployments/migrations, destructive actions and production writes need explicit owner
+approval. Local backend SAM edits and user-system untracked aws file were not read/copied/staged.
+
+### Frontend
+
+No frontend runtime/UI changes. Current screen/placeholder/loading/localization/layout state
+documented; not certified as live behavior by this setup.
+
+### Verification
+
+- `[passed] git pull --ff-only` in all three repositories; existing files preserved.
+- `[passed] source/docs/routes/workflow review and public GitHub issue queries` - no open
+  issues returned; no authenticated issue created or private partner tasks assumed visible.
+- `[passed] bounded memory/relative Markdown link/selected credential-machine-path checks`.
+- `[passed] staged-diff review` - Markdown only, no application/config/migration code.
+- `[passed] git diff --check` after correcting the new entry's trailing blank line.
+- `[failed] initial final-document checks` - workspace-nested Git ownership context
+  and a new EOF blank line; reran in explicit repository context after correction.
+- `[not run] application tests, mypy, build, manual deployment and live verification` -
+  documentation-only change; historical check results clearly labeled, not new test claims.
+- Browser/Search Console remains unavailable here. No live ranking/deployment claim.
+
+### Deployment
+
+No deployment needed. Existing push workflows can deploy/migrate/backfill, so setup/checkpoint
+commits explicitly use [skip ci] without changing triggers or assertions. No manual workflow,
+database migration, public release or production write dispatched.
+
+### Git
+
+- Branch: `main`
+- Commit: `09faaaee5b330e34d7f74bc5fa134a8b0c02d197` (initial setup, followed by separate append-only log/checkpoint commit).
+- Push: `successful` - initial setup published on origin/main without force or conflicts.
+
+### Notes
+
+Partner-to-checkout/session/workstream mapping remains for the humans to choose; owner is
+default integration decision-maker until delegated. Published handoffs are not technical
+locks or automatic cross-agent context. Application source remains authoritative.

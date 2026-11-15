@@ -1,7 +1,7 @@
 # INKFIG-COLLAB-001 - Establish shared project memory
-Updated: 2026-11-15. Status: implementation documented; validation/publication pending.
+Updated: 2026-11-15. Status: setup completed; initial documentation pushed successfully.
 Responsible human: project owner (user of this session).
-Agent/session: /root, existing InkFig session; no private cross-agent awareness.
+Agent/session: owner-primary-2026-11-15 (/root; task-local label, not a global chat ID).
 Integration owner: project owner until explicitly delegated.
 Issue: not created; no authenticated issue-writing tool/gh in this environment.
 Public issue-list queries returned no open issues on 2026-11-15.
@@ -40,7 +40,9 @@ Do not stage backend samconfig.toml edits or user-system untracked aws.
 - No runtime/tests/CI/migrations/env changes; no production writes.
 
 ## Checks and limits
-Pending docs link/line-bound/secret-pattern/Git diff and historical-prefix checks.
+Passed docs links, six-file <=150-line bounds, selected secret/path patterns and Git diff checks.
+Passed documentation-only staging review; only Markdown changed in this ticket.
+Existing feature-log prefixes preserved; append-only record added in final checkpoint.
 Runtime suites/builds intentionally not run: Markdown-only setup.
 No authenticated issue creation, manual deployment, migration, live Google access or
 physical-device verification claimed. Final validation/commit/push evidence belongs below.
@@ -53,10 +55,17 @@ Use docs-only [skip ci] commits for this setup; do not bypass application failur
 No new workflow triggers or PR gates. Preserve protected-branch errors if encountered.
 
 ## Exact next step
-Validate Markdown links/bounds/diff, append required feature-log entries, stage only
-documentation, commit, fetch/integrate only unpublished history and push without force.
-Then record actual hashes/status in handoff or final report and request only the
-missing partner-to-checkout/task ownership mapping before shared implementation.
+Owner/partners choose next bounded tasks and independent checkout/session assignments.
+Read current instructions/state and recheck claims/upstream before starting. Do not
+repeat setup or assume this documentation authorizes a pending migration/deployment.
+
+## Publication evidence
+- Branch: main. Setup commit: 09faaaee5b330e34d7f74bc5fa134a8b0c02d197; push to origin/main successful.
+- Companion setup commits: main09faaae, user8664a9b, frontenddd424da.
+- Final checkpoint/log commit is separate and also uses [skip ci]; identify it in Git history.
+- No app deployment, migration, backfill or live behavior verification was performed.
+- Workspace AGENTS/index are local convenience; all substantive facts/policies are tracked
+  in the three repos. New collaborators can clone those and reconstruct the index.
 
 ## Integration pointer
 [Related repositories and handoffs](../RELATED_REPOS.md).
