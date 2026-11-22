@@ -15,3 +15,6 @@ class ExhibitionRatingService:
         if score is not None and (type(score) is not int or not 1 <= score <= 5):
             raise ExhibitionError(422, "Choose an integer rating from 1 to 5.")
         return await self.repository.change(exhibition_id, work_id, actor, score)
+
+    async def get(self, exhibition_id: UUID, work_id: UUID, actor: UUID | None) -> RatingState:
+        return await self.repository.get(exhibition_id, work_id, actor)

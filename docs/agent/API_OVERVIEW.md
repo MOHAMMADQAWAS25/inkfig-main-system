@@ -37,6 +37,8 @@ Public read does not authorize any write. No browser Supabase service credential
 - POST/PATCH .../submissions/{submissionId}/withdrawal: owner request/manager decision.
 - PUT/DELETE/GET /exhibitions/{id}/blocks...: management participation restrictions.
 - POST .../{id}/banner-uploads and /banner-uploads/complete: scoped storage lifecycle.
+- GET /exhibitions/{id}/works/{workId}/rating: public-visible artwork only, session-scoped
+  RatingState/eligibility; private no-store response, no mutation.
 - PUT/DELETE /exhibitions/{id}/works/{workId}/rating: strict score1..5, actor from
   session, live eligibility, private my_rating; not a request-supplied user ID.
 - GET /exhibitions/{id}/leaderboard: public counted-vote rank; type_id filter before page.

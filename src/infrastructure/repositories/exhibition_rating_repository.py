@@ -46,6 +46,22 @@ class SqlAlchemyExhibitionRatingRepository:
             await self.session.rollback()
             raise
 
+    async def get(self, exhibition_id: UUID, work_id: UUID, actor: UUID | None) -> RatingState:
+        # Read only public exhibition artwork; viewer eligibility remains authoritative
+        # through the same expression used by gallery and mutation responses.
+        data = await self.session.scalar(text(f"""select {rating_state_sql()}
+            from exhibition_submissions s join exhibitions e on e.exhibition_id=s.exhibition_id
+            join works w on w.work_id=s.work_id join user_accounts owner on owner.user_id=w.owner_user_id
+            where s.exhibition_id=:exhibition and s.work_id=:work
+              and s.status='approved' and e.event_at<=now() and w.status='published'
+              and owner.account_status='active' and owner.is_active=true
+              and not exists(select 1 from exhibition_blocks b
+                             where b.exhibition_id=s.exhibition_id and b.user_id=s.user_id)"""),
+            {"exhibition": exhibition_id, "work": work_id, "viewer": actor})
+        if data is None:
+            raise ExhibitionError(404, "Exhibition artwork not found.")
+        return RatingState.model_validate(data)
+
     async def _state(self, params: dict[str, object]) -> RatingState:
         data = await self.session.scalar(text(f"""select {rating_state_sql()}
             from exhibition_submissions s join exhibitions e on e.exhibition_id=s.exhibition_id

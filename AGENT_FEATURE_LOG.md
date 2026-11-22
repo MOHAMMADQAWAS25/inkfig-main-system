@@ -3505,3 +3505,24 @@ database migration, public release or production write dispatched.
 Partner-to-checkout/session/workstream mapping remains for the humans to choose; owner is
 default integration decision-maker until delegated. Published handoffs are not technical
 locks or automatic cross-agent context. Application source remains authoritative.
+
+## 2026-11-22 — INKFIG-LEADERBOARD-VOTE-001
+### Request / Changes
+Enable rating from leaderboard artwork popup; add read-only RatingState endpoint
+using existing viewer eligibility SQL and visible approved exhibition artwork scope.
+### Repositories / Files
+inkfig-main-system: rating repository contract/SQL adapter/service, exhibition route,
+rating tests, API/state memory, task handoff and this append-only log.
+### API / Database / Permissions and scope
+GET /exhibitions/{id}/works/{workId}/rating; private no-store, session actor only.
+Existing mutation authorization unchanged. No migration required.
+### Frontend
+Dependent inkfig-user-FE change loads this state and reuses existing voting controls.
+### Verification
+Diff reviewed/whitespace checked. Local Python unavailable, including saved venv.
+Existing CI pytest/mypy must pass before deployment/frontend publication.
+### Deployment / Git / Notes
+Branch feature/leaderboard-popup-rating, independent checkout; a7mad.ishaq owns integration.
+Backend first, frontend second. Main push runs existing tests/mypy/SAM/deployment,
+migration runner and media backfill; no new migrations/triggers or manual operations.
+Exact commits and workflow outcomes in task handoff. Revert focused commits for rollback.

@@ -115,6 +115,14 @@ async def submissions(
     return await service.submissions(actor, exhibition_id, scope, limit, cursor, status)
 
 
+@router.get("/{exhibition_id}/works/{work_id}/rating", response_model=RatingState)
+async def get_artwork_rating(exhibition_id: UUID, work_id: UUID, actor: Actor,
+                             service: Annotated[ExhibitionRatingService, Depends(get_exhibition_rating_service)], response: Response) -> RatingState:
+    response.headers["Cache-Control"] = "private, no-store"
+    response.headers["Vary"] = "Cookie, Authorization"
+    return await service.get(exhibition_id, work_id, actor)
+
+
 @router.put("/{exhibition_id}/works/{work_id}/rating", response_model=RatingState)
 async def rate_artwork(exhibition_id: UUID, work_id: UUID, data: RatingInput, actor: Actor,
                        service: Annotated[ExhibitionRatingService, Depends(get_exhibition_rating_service)], response: Response) -> RatingState:

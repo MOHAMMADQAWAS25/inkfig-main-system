@@ -125,6 +125,50 @@ def test_anonymous_rating_endpoint_rejects_vote() -> None:
     repository.change.assert_not_awaited()
 
 
+@pytest.mark.parametrize("actor", [None, UUID(int=1)])
+def test_rating_read_uses_session_identity_and_private_cache(actor: UUID | None) -> None:
+    exhibition, work = uuid4(), uuid4()
+    repository = AsyncMock()
+    repository.get.return_value = RatingState(my_rating=3 if actor else None, can_rate=bool(actor))
+    app = create_app()
+    app.dependency_overrides[get_optional_user] = lambda: actor
+    app.dependency_overrides[get_exhibition_rating_service] = lambda: ExhibitionRatingService(cast(ExhibitionRatingRepository, repository))
+    response = TestClient(app).get(f"/api/v1/exhibitions/{exhibition}/works/{work}/rating")
+    assert response.status_code == 200
+    assert response.json()["my_rating"] == (3 if actor else None)
+    assert response.headers["cache-control"] == "private, no-store"
+    assert response.headers["vary"] == "Cookie, Authorization"
+    repository.get.assert_awaited_once_with(exhibition, work, actor)
+    repository.change.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_rating_read_limits_visibility_and_never_writes() -> None:
+    session = MagicMock(spec=AsyncSession)
+    session.scalar = AsyncMock(return_value={"average": 4, "vote_count": 2, "my_rating": 4, "can_rate": True})
+    session.execute, session.commit = AsyncMock(), AsyncMock()
+    exhibition, work, actor = uuid4(), uuid4(), uuid4()
+    result = await SqlAlchemyExhibitionRatingRepository(cast(AsyncSession, session)).get(exhibition, work, actor)
+    assert result.my_rating == 4
+    query, params = session.scalar.call_args.args
+    assert params == {"exhibition": exhibition, "work": work, "viewer": actor}
+    sql = str(query)
+    for predicate in ["s.status='approved'", "e.event_at<=now()", "w.status='published'", "owner.account_status='active'", "owner.is_active=true", "b.user_id=s.user_id"]:
+        assert predicate in sql
+    assert rating_denial_sql() in sql
+    session.execute.assert_not_awaited()
+    session.commit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_rating_read_missing_or_hidden_artwork_is_not_found() -> None:
+    session = MagicMock(spec=AsyncSession)
+    session.scalar = AsyncMock(return_value=None)
+    with pytest.raises(ExhibitionError) as failure:
+        await SqlAlchemyExhibitionRatingRepository(cast(AsyncSession, session)).get(uuid4(), uuid4(), None)
+    assert failure.value.status == 404
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("found", [[None],[UUID(int=1),None]])
 async def test_missing_rating_scope_never_writes(found: list[UUID | None]) -> None:
